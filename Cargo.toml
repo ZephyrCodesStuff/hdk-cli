@@ -3,15 +3,19 @@ name = "hdk-cli"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "hdk"
+path = "src/main.rs"
+
 [dependencies]
-# hdk-archive = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
-# hdk-sdat = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
-# hdk-secure = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
-# hdk-comp = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
-hdk-archive = { path = "../hdk-rs/hdk-archive" }
-hdk-sdat = { path = "../hdk-rs/hdk-sdat" }
-hdk-secure = { path = "../hdk-rs/hdk-secure" }
-hdk-comp = { path = "../hdk-rs/hdk-comp" }
+hdk-archive = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
+hdk-sdat = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
+hdk-secure = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
+hdk-comp = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
+# hdk-archive = { path = "../hdk-rs/hdk-archive" }
+# hdk-sdat = { path = "../hdk-rs/hdk-sdat" }
+# hdk-secure = { path = "../hdk-rs/hdk-secure" }
+# hdk-comp = { path = "../hdk-rs/hdk-comp" }
 
 clap = { version = "4.5.53", features = ["derive"] }
 enum_dispatch = "0.3"
