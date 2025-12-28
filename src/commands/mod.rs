@@ -1,4 +1,4 @@
-use crate::commands::{bar::Bar, crypt::Crypt, sdat::Sdat, sharc::Sharc};
+use crate::commands::{bar::Bar, compress::Compress, crypt::Crypt, sdat::Sdat, sharc::Sharc};
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
@@ -6,6 +6,7 @@ use enum_dispatch::enum_dispatch;
 
 pub mod bar;
 pub mod common;
+pub mod compress;
 pub mod crypt;
 pub mod sdat;
 pub mod sharc;
@@ -47,6 +48,10 @@ pub enum Command {
     /// Cryptographic operations
     #[command(subcommand)]
     Crypt(Crypt),
+
+    /// Compression operations (EdgeZLib / EdgeLZMA)
+    #[command(subcommand)]
+    Compress(Compress),
 }
 
 /// Common input/output arguments for commands.

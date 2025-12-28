@@ -443,6 +443,7 @@ dependencies = [
  "dialoguer",
  "enum_dispatch",
  "hdk-archive",
+ "hdk-comp",
  "hdk-sdat",
  "hdk-secure",
  "walkdir",

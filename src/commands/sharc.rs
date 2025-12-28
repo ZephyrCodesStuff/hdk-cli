@@ -7,8 +7,10 @@ use hdk_archive::{sharc::writer::SharcWriter, structs::Endianness};
 #[derive(Subcommand, Debug)]
 pub enum Sharc {
     /// Create a SHARC archive
+    #[clap(alias = "c")]
     Create(IOArgs),
     /// Extract a SHARC archive
+    #[clap(alias = "x")]
     Extract(IOArgs),
 }
 

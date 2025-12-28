@@ -4,8 +4,10 @@ use clap::Subcommand;
 #[derive(Subcommand, Debug)]
 pub enum Crypt {
     /// Encrypt a file
+    #[clap(alias = "e")]
     Encrypt,
     /// Decrypt a file
+    #[clap(alias = "d")]
     Decrypt,
 }
 

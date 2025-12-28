@@ -6,8 +6,10 @@ use clap::Subcommand;
 #[derive(Subcommand, Debug)]
 pub enum Bar {
     /// Create a BAR archive
+    #[clap(alias = "c")]
     Create(IOArgs),
     /// Extract a BAR archive
+    #[clap(alias = "x")]
     Extract(IOArgs),
 }
 
