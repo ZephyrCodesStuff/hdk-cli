@@ -106,29 +106,11 @@ impl Sdat {
 
         common::create_output_dir(output)?;
 
-        // Extract all entries to the output folder
-        for i in 0..archive_reader.entries().len() {
-            let name_hash = archive_reader.entries()[i].name_hash();
-            let output_path = output.join(name_hash.to_string());
+        let extracted = common::extract_archive_entries(&mut archive_reader, output, |m| {
+            m.name_hash.to_string().into()
+        })?;
 
-            let mut output_file = std::fs::File::create(&output_path)
-                .map_err(|e| format!("failed to create output file: {e}"))?;
-
-            let mut entry_reader = archive_reader
-                .entry_reader(i)
-                .map_err(|e| format!("failed to create entry reader: {e}"))?;
-
-            std::io::copy(&mut entry_reader, &mut output_file)
-                .map_err(|e| format!("failed to write entry to file: {e}"))?;
-
-            println!("Extracted: {}", name_hash);
-        }
-
-        println!(
-            "Extracted {} files to {}",
-            archive_reader.entries().len(),
-            output.display()
-        );
+        println!("Extracted {extracted} files to {}", output.display());
         Ok(())
     }
 }
