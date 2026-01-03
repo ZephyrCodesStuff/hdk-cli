@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use crate::commands::{Execute, IOArgs, common};
+use crate::{
+    commands::{Execute, IOArgs, common},
+    keys::{BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY},
+};
 use clap::Subcommand;
 
 #[derive(Subcommand, Debug)]
@@ -28,13 +31,17 @@ impl Execute for Bar {
 
 impl Bar {
     pub fn create(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
-        let mut archive_writer = hdk_archive::bar::writer::BarWriter::new(Vec::new());
+        let mut archive_writer = hdk_archive::bar::writer::BarWriter::new(
+            Vec::new(),
+            BAR_DEFAULT_KEY,
+            BAR_SIGNATURE_KEY,
+        );
 
         let files = common::collect_input_files(input)?;
 
         for (abs_path, rel_path) in files {
             let data = common::read_file_bytes(&abs_path)?;
-            let name_hash = hdk_secure::hash::AfsHash::from_path(&rel_path);
+            let name_hash = hdk_secure::hash::AfsHash::new_from_path(&rel_path);
 
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
@@ -63,8 +70,13 @@ impl Bar {
         let file =
             std::fs::File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
 
-        let mut archive_reader = hdk_archive::bar::reader::BarReader::open(file)
-            .map_err(|e| format!("failed to open BAR archive: {e}"))?;
+        let mut archive_reader = hdk_archive::bar::reader::BarReader::open(
+            file,
+            BAR_DEFAULT_KEY,
+            BAR_SIGNATURE_KEY,
+            None,
+        )
+        .map_err(|e| format!("failed to open BAR archive: {e}"))?;
 
         common::create_output_dir(output)?;
 

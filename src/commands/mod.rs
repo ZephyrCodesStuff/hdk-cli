@@ -1,4 +1,6 @@
-use crate::commands::{bar::Bar, compress::Compress, crypt::Crypt, sdat::Sdat, sharc::Sharc};
+use crate::commands::{
+    bar::Bar, compress::Compress, crypt::Crypt, map::Map, sdat::Sdat, sharc::Sharc,
+};
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
@@ -8,6 +10,7 @@ pub mod bar;
 pub mod common;
 pub mod compress;
 pub mod crypt;
+pub mod map;
 pub mod sdat;
 pub mod sharc;
 
@@ -52,6 +55,10 @@ pub enum Command {
     /// Compression operations (EdgeZLib / EdgeLZMA)
     #[command(subcommand)]
     Compress(Compress),
+
+    /// Map files and restore original file structures
+    #[command()]
+    Map(Map),
 }
 
 /// Common input/output arguments for commands.

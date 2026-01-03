@@ -38,7 +38,7 @@ impl Sharc {
 
         for (abs_path, rel_path) in files {
             let data = common::read_file_bytes(&abs_path)?;
-            let name_hash = hdk_secure::hash::AfsHash::from_path(&rel_path);
+            let name_hash = hdk_secure::hash::AfsHash::new_from_path(&rel_path);
 
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 

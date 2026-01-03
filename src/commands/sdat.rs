@@ -1,7 +1,8 @@
+use clap::Subcommand;
+use hdk_sdat::SdatKeys;
 use std::path::PathBuf;
 
 use crate::commands::{Execute, IOArgs, common};
-use clap::Subcommand;
 
 #[derive(Subcommand, Debug)]
 pub enum Sdat {
@@ -12,6 +13,37 @@ pub enum Sdat {
     #[clap(alias = "x")]
     Extract(IOArgs),
 }
+
+const SDAT_KEYS: SdatKeys = SdatKeys {
+    sdat_key: [
+        0x0D, 0x65, 0x5E, 0xF8, 0xE6, 0x74, 0xA9, 0x8A, 0xB8, 0x50, 0x5C, 0xFA, 0x7D, 0x01, 0x29,
+        0x33,
+    ],
+    edat_hash_0: [
+        0xEF, 0xFE, 0x5B, 0xD1, 0x65, 0x2E, 0xEB, 0xC1, 0x19, 0x18, 0xCF, 0x7C, 0x04, 0xD4, 0xF0,
+        0x11,
+    ],
+    edat_hash_1: [
+        0x3D, 0x92, 0x69, 0x9B, 0x70, 0x5B, 0x07, 0x38, 0x54, 0xD8, 0xFC, 0xC6, 0xC7, 0x67, 0x27,
+        0x47,
+    ],
+    edat_key_0: [
+        0xBE, 0x95, 0x9C, 0xA8, 0x30, 0x8D, 0xEF, 0xA2, 0xE5, 0xE1, 0x80, 0xC6, 0x37, 0x12, 0xA9,
+        0xAE,
+    ],
+    edat_key_1: [
+        0x4C, 0xA9, 0xC1, 0x4B, 0x01, 0xC9, 0x53, 0x09, 0x96, 0x9B, 0xEC, 0x68, 0xAA, 0x0B, 0xC0,
+        0x81,
+    ],
+    npdrm_omac_key_2: [
+        0x6B, 0xA5, 0x29, 0x76, 0xEF, 0xDA, 0x16, 0xEF, 0x3C, 0x33, 0x9F, 0xB2, 0x97, 0x1E, 0x25,
+        0x6B,
+    ],
+    npdrm_omac_key_3: [
+        0x9B, 0x51, 0x5F, 0xEA, 0xCF, 0x75, 0x06, 0x49, 0x81, 0xAA, 0x60, 0x4D, 0x91, 0xA5, 0x4E,
+        0x97,
+    ],
+};
 
 impl Execute for Sdat {
     fn execute(self) {
@@ -41,7 +73,7 @@ impl Sdat {
 
         for (abs_path, rel_path) in files {
             let data = common::read_file_bytes(&abs_path)?;
-            let name_hash = hdk_secure::hash::AfsHash::from_path(&rel_path);
+            let name_hash = hdk_secure::hash::AfsHash::new_from_path(&rel_path);
 
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
@@ -69,7 +101,7 @@ impl Sdat {
 
         let output_file = common::create_output_file(output)?;
 
-        let sdat = hdk_sdat::SdatWriter::new(output_file_name)
+        let sdat = hdk_sdat::SdatWriter::new(output_file_name, SDAT_KEYS)
             .map_err(|e| format!("failed to create SDAT writer: {e}"))?;
 
         let sdat_bytes = sdat
@@ -90,8 +122,8 @@ impl Sdat {
             std::fs::File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
 
         // Parse the SDAT file to extract the SHARC archive
-        let mut sdat =
-            hdk_sdat::SdatReader::open(file).map_err(|e| format!("failed to open SDAT: {e}"))?;
+        let mut sdat = hdk_sdat::SdatReader::open(file, &SDAT_KEYS)
+            .map_err(|e| format!("failed to open SDAT: {e}"))?;
 
         let archive_bytes = sdat
             .decrypt_to_vec()
