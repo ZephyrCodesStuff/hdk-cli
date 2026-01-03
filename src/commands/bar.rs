@@ -35,9 +35,27 @@ impl Bar {
             Vec::new(),
             BAR_DEFAULT_KEY,
             BAR_SIGNATURE_KEY,
-        );
+        )
+        .unwrap();
 
         let files = common::collect_input_files(input)?;
+
+        // Check if the input directory has a `.time` file for timestamp.
+        // If so, parse as i32 and use it as the archive timestamp.
+        let time_path = input.join(".time");
+        if time_path.exists() {
+            let time_bytes = common::read_file_bytes(&time_path)?;
+            if time_bytes.len() == 4 {
+                // TODO: when BAR supports endianness, use that instead of LE
+                let timestamp = i32::from_le_bytes(time_bytes.try_into().unwrap());
+                archive_writer = archive_writer.with_timestamp(timestamp);
+                println!("Using timestamp from .time file: {}", timestamp);
+            } else {
+                println!(
+                    "Warning: .time file has invalid length, using default timestamp (system time)."
+                );
+            }
+        }
 
         for (abs_path, rel_path) in files {
             let data = common::read_file_bytes(&abs_path)?;
@@ -85,10 +103,17 @@ impl Bar {
             m.name_hash.to_string().into()
         })?;
 
-        // Keep the existing UX (log count and destination).
         if extracted > 0 {
             println!("Extracted {extracted} entries");
         }
+
+        // Save the `.time` with the archive's endianess in the output folder root
+        let time = archive_reader.header().timestamp;
+        let time_path = output.join(".time");
+        let time_bytes = time.to_le_bytes(); // TODO: use endianess when BAR supports it
+
+        std::fs::write(&time_path, time_bytes)
+            .map_err(|e| format!("failed to write .time file: {e}"))?;
 
         println!("Extracted {extracted} files to {}", output.display());
         Ok(())

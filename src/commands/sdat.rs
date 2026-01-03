@@ -1,4 +1,5 @@
 use clap::Subcommand;
+use hdk_archive::structs::Endianness;
 use hdk_sdat::SdatKeys;
 use std::path::PathBuf;
 
@@ -143,6 +144,17 @@ impl Sdat {
         let extracted = common::extract_archive_entries(&mut archive_reader, output, |m| {
             m.name_hash.to_string().into()
         })?;
+
+        // Save the `.time` with the archive's endianess in the output folder root
+        let time = archive_reader.header().timestamp;
+        let time_path = output.join(".time");
+        let time_bytes = match archive_reader.endianness {
+            Endianness::Big => time.to_be_bytes(),
+            Endianness::Little => time.to_le_bytes(),
+        };
+
+        std::fs::write(&time_path, time_bytes)
+            .map_err(|e| format!("failed to write .time file: {e}"))?;
 
         println!("Extracted {extracted} files to {}", output.display());
         Ok(())

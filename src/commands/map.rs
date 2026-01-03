@@ -5,7 +5,7 @@ use crate::commands::Execute;
 
 use hdk_archive::mapper::Mapper;
 
-const DEFAULT_OUTPUT_SUFFIX: &str = "_mapped";
+const DEFAULT_OUTPUT_SUFFIX: &str = "mapped";
 
 #[derive(Args, Debug)]
 pub struct Map {
@@ -15,7 +15,13 @@ pub struct Map {
 
     /// (Optional) Output directory for mapped files
     ///
-    /// If not provided, defaults to `./{input}_mapped`
+    /// If not provided, defaults to `./{input}.mapped`
+    ///
+    /// # Warning
+    ///
+    /// Some operating systems (such as macOS) do not allow for `.` in folder names.
+    ///
+    /// In such cases, the OS may automatically replace `.` with `_` or another character.
     #[clap(short, long)]
     pub output: Option<PathBuf>,
 

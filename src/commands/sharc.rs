@@ -30,11 +30,32 @@ impl Execute for Sharc {
 impl Sharc {
     pub fn create(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
         // TODO: let user pick endianness
+        let endianess = Endianness::Big;
+
         let mut archive_writer = SharcWriter::default()
             .with_key(crate::keys::SHARC_DEFAULT_KEY)
-            .with_endianess(Endianness::Big);
+            .with_endianess(endianess);
 
         let files = common::collect_input_files(input)?;
+
+        // Check if the input directory has a `.time` file for timestamp.
+        // If so, parse as i32 and use it as the archive timestamp.
+        let time_path = input.join(".time");
+        if time_path.exists() {
+            let time_bytes = common::read_file_bytes(&time_path)?;
+            if time_bytes.len() == 4 {
+                let timestamp = match endianess {
+                    Endianness::Big => i32::from_be_bytes(time_bytes.try_into().unwrap()),
+                    Endianness::Little => i32::from_le_bytes(time_bytes.try_into().unwrap()),
+                };
+                archive_writer = archive_writer.with_timestamp(timestamp);
+                println!("Using timestamp from .time file: {}", timestamp);
+            } else {
+                println!(
+                    "Warning: .time file has invalid length, using default timestamp (system time)."
+                );
+            }
+        }
 
         for (abs_path, rel_path) in files {
             let data = common::read_file_bytes(&abs_path)?;
@@ -76,6 +97,17 @@ impl Sharc {
         let extracted = common::extract_archive_entries(&mut archive_reader, output, |m| {
             m.name_hash.to_string().into()
         })?;
+
+        // Save the `.time` with the archive's endianess in the output folder root
+        let time = archive_reader.header().timestamp;
+        let time_path = output.join(".time");
+        let time_bytes = match archive_reader.endianness {
+            Endianness::Big => time.to_be_bytes(),
+            Endianness::Little => time.to_le_bytes(),
+        };
+
+        std::fs::write(&time_path, time_bytes)
+            .map_err(|e| format!("failed to write .time file: {e}"))?;
 
         println!("Extracted {extracted} files to {}", output.display());
         Ok(())
