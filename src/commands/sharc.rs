@@ -44,10 +44,7 @@ impl Sharc {
         if time_path.exists() {
             let time_bytes = common::read_file_bytes(&time_path)?;
             if time_bytes.len() == 4 {
-                let timestamp = match endianess {
-                    Endianness::Big => i32::from_be_bytes(time_bytes.try_into().unwrap()),
-                    Endianness::Little => i32::from_le_bytes(time_bytes.try_into().unwrap()),
-                };
+                let timestamp = i32::from_le_bytes(time_bytes.try_into().unwrap());
                 archive_writer = archive_writer.with_timestamp(timestamp);
                 println!("Using timestamp from .time file: {}", timestamp);
             } else {
@@ -101,12 +98,8 @@ impl Sharc {
         // Save the `.time` with the archive's endianess in the output folder root
         let time = archive_reader.header().timestamp;
         let time_path = output.join(".time");
-        let time_bytes = match archive_reader.endianness {
-            Endianness::Big => time.to_be_bytes(),
-            Endianness::Little => time.to_le_bytes(),
-        };
 
-        std::fs::write(&time_path, time_bytes)
+        std::fs::write(&time_path, time.to_le_bytes())
             .map_err(|e| format!("failed to write .time file: {e}"))?;
 
         println!("Extracted {extracted} files to {}", output.display());

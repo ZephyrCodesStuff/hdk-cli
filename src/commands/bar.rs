@@ -46,7 +46,6 @@ impl Bar {
         if time_path.exists() {
             let time_bytes = common::read_file_bytes(&time_path)?;
             if time_bytes.len() == 4 {
-                // TODO: when BAR supports endianness, use that instead of LE
                 let timestamp = i32::from_le_bytes(time_bytes.try_into().unwrap());
                 archive_writer = archive_writer.with_timestamp(timestamp);
                 println!("Using timestamp from .time file: {}", timestamp);

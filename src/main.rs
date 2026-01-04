@@ -1,5 +1,3 @@
-#![feature(path_add_extension)]
-
 use clap::Parser;
 
 mod commands;

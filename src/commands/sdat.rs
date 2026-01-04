@@ -1,6 +1,4 @@
 use clap::Subcommand;
-use hdk_archive::structs::Endianness;
-use hdk_sdat::SdatKeys;
 use std::path::PathBuf;
 
 use crate::commands::{Execute, IOArgs, common};
@@ -15,7 +13,7 @@ pub enum Sdat {
     Extract(IOArgs),
 }
 
-const SDAT_KEYS: SdatKeys = SdatKeys {
+const SDAT_KEYS: hdk_sdat::SdatKeys = hdk_sdat::SdatKeys {
     sdat_key: [
         0x0D, 0x65, 0x5E, 0xF8, 0xE6, 0x74, 0xA9, 0x8A, 0xB8, 0x50, 0x5C, 0xFA, 0x7D, 0x01, 0x29,
         0x33,
@@ -72,6 +70,22 @@ impl Sdat {
 
         let files = common::collect_input_files(input)?;
 
+        // Check if the input directory has a `.time` file for timestamp.
+        // If so, parse as i32 and use it as the archive timestamp.
+        let time_path = input.join(".time");
+        if time_path.exists() {
+            let time_bytes = common::read_file_bytes(&time_path)?;
+            if time_bytes.len() == 4 {
+                let timestamp = i32::from_le_bytes(time_bytes.try_into().unwrap());
+                archive_writer = archive_writer.with_timestamp(timestamp);
+                println!("Using timestamp from .time file: {}", timestamp);
+            } else {
+                println!(
+                    "Warning: .time file has invalid length, using default timestamp (system time)."
+                );
+            }
+        }
+
         for (abs_path, rel_path) in files {
             let data = common::read_file_bytes(&abs_path)?;
             let name_hash = hdk_secure::hash::AfsHash::new_from_path(&rel_path);
@@ -122,7 +136,7 @@ impl Sdat {
         let file =
             std::fs::File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
 
-        // Parse the SDAT file to extract the SHARC archive
+        // Parse the SDAT file to extract the SHARC/BAR archive
         let mut sdat = hdk_sdat::SdatReader::open(file, &SDAT_KEYS)
             .map_err(|e| format!("failed to open SDAT: {e}"))?;
 
@@ -130,33 +144,54 @@ impl Sdat {
             .decrypt_to_vec()
             .map_err(|e| format!("failed to decrypt SDAT: {e}"))?;
 
-        let archive_cursor = std::io::Cursor::new(archive_bytes);
-
-        // TODO: check whether it's a SHARC or BAR archive instead of assuming SHARC
-        let mut archive_reader = hdk_archive::sharc::reader::SharcReader::open(
-            archive_cursor,
+        // Try SHARC first, then BAR. If neither work, return error.
+        // Each attempt gets its own cursor because opening may consume/inspect it.
+        // Try SHARC
+        if let Ok(mut archive_reader) = hdk_archive::sharc::reader::SharcReader::open(
+            std::io::Cursor::new(archive_bytes.clone()),
             crate::keys::SHARC_SDAT_KEY,
-        )
-        .map_err(|e| format!("failed to open SHARC archive: {e}"))?;
+        ) {
+            common::create_output_dir(output)?;
 
-        common::create_output_dir(output)?;
+            let extracted = common::extract_archive_entries(&mut archive_reader, output, |m| {
+                m.name_hash.to_string().into()
+            })?;
 
-        let extracted = common::extract_archive_entries(&mut archive_reader, output, |m| {
-            m.name_hash.to_string().into()
-        })?;
+            // Save the `.time` with the archive's endianess in the output folder root
+            let time = archive_reader.header().timestamp;
+            let time_path = output.join(".time");
 
-        // Save the `.time` with the archive's endianess in the output folder root
-        let time = archive_reader.header().timestamp;
-        let time_path = output.join(".time");
-        let time_bytes = match archive_reader.endianness {
-            Endianness::Big => time.to_be_bytes(),
-            Endianness::Little => time.to_le_bytes(),
-        };
+            std::fs::write(&time_path, time.to_le_bytes())
+                .map_err(|e| format!("failed to write .time file: {e}"))?;
 
-        std::fs::write(&time_path, time_bytes)
-            .map_err(|e| format!("failed to write .time file: {e}"))?;
+            println!("Extracted {extracted} files to {}", output.display());
+            return Ok(());
+        }
 
-        println!("Extracted {extracted} files to {}", output.display());
-        Ok(())
+        // Try BAR
+        if let Ok(mut archive_reader) = hdk_archive::bar::reader::BarReader::open(
+            std::io::Cursor::new(archive_bytes.clone()),
+            crate::keys::BAR_DEFAULT_KEY,
+            crate::keys::BAR_SIGNATURE_KEY,
+            None,
+        ) {
+            common::create_output_dir(output)?;
+
+            let extracted = common::extract_archive_entries(&mut archive_reader, output, |m| {
+                m.name_hash.to_string().into()
+            })?;
+
+            // Save the `.time` as LE (since in the future we won't know what endianness the archive had)
+            let time = archive_reader.header().timestamp;
+            let time_path = output.join(".time");
+
+            std::fs::write(&time_path, time.to_le_bytes())
+                .map_err(|e| format!("failed to write .time file: {e}"))?;
+
+            println!("Extracted {extracted} files to {}", output.display());
+            return Ok(());
+        }
+
+        Err("file does not contain a supported SHARC or BAR archive".to_string())
     }
 }

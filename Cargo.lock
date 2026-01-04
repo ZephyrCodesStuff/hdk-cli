@@ -528,7 +528,7 @@ checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 [[package]]
 name = "hdk-archive"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#12dd05d813716e0c39c8f9568fd87d174a614246"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#2474e9273f2f7e941429a5801ca90db2c352319b"
 dependencies = [
  "aes",
  "binrw",
@@ -562,7 +562,7 @@ dependencies = [
 [[package]]
 name = "hdk-comp"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#12dd05d813716e0c39c8f9568fd87d174a614246"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#2474e9273f2f7e941429a5801ca90db2c352319b"
 dependencies = [
  "byteorder",
  "flate2",
@@ -572,7 +572,7 @@ dependencies = [
 [[package]]
 name = "hdk-sdat"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#12dd05d813716e0c39c8f9568fd87d174a614246"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#2474e9273f2f7e941429a5801ca90db2c352319b"
 dependencies = [
  "aes",
  "binrw",
@@ -585,7 +585,7 @@ dependencies = [
 [[package]]
 name = "hdk-secure"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#12dd05d813716e0c39c8f9568fd87d174a614246"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#2474e9273f2f7e941429a5801ca90db2c352319b"
 dependencies = [
  "byteorder",
  "cbc",
@@ -896,9 +896,9 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "syn"
-version = "2.0.112"
+version = "2.0.113"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21f182278bf2d2bcb3c88b1b08a37df029d71ce3d3ae26168e3c653b213b99d4"
+checksum = "678faa00651c9eb72dd2020cbdf275d92eccb2400d568e419efdd64838145cb4"
 dependencies = [
  "proc-macro2",
  "quote",
