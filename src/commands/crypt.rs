@@ -11,6 +11,7 @@ pub enum Crypt {
     Decrypt,
 }
 
+// TODO: implement this
 impl Execute for Crypt {
     fn execute(self) {
         match self {
