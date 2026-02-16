@@ -131,20 +131,17 @@ where
             let output_path = output_dir.join(rel_path);
 
             let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "failed to create output file {}: {e}",
-                        output_path.display()
-                    ),
-                )
+                std::io::Error::other(format!(
+                    "failed to create output file {}: {e}",
+                    output_path.display()
+                ))
             })?;
 
             std::io::copy(&mut entry.reader, &mut output_file).map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("failed to write entry to {}: {e}", output_path.display()),
-                )
+                std::io::Error::other(format!(
+                    "failed to write entry to {}: {e}",
+                    output_path.display()
+                ))
             })?;
 
             Ok(())

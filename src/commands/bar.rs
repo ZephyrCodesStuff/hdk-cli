@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::{
     commands::{Execute, IOArgs, common},
@@ -19,8 +19,8 @@ pub enum Bar {
 impl Execute for Bar {
     fn execute(self) {
         let result = match self {
-            Self::Create(args) => Bar::create(&args.input, &args.output),
-            Self::Extract(args) => Bar::extract(&args.input, &args.output),
+            Self::Create(args) => Self::create(&args.input, &args.output),
+            Self::Extract(args) => Self::extract(&args.input, &args.output),
         };
 
         if let Err(e) = result {
@@ -30,7 +30,7 @@ impl Execute for Bar {
 }
 
 impl Bar {
-    pub fn create(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
+    pub fn create(input: &Path, output: &Path) -> Result<(), String> {
         let mut archive_writer = hdk_archive::bar::writer::BarWriter::new(
             Vec::new(),
             BAR_DEFAULT_KEY,
@@ -83,7 +83,7 @@ impl Bar {
         Ok(())
     }
 
-    pub fn extract(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
+    pub fn extract(input: &Path, output: &Path) -> Result<(), String> {
         let file =
             std::fs::File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
 
