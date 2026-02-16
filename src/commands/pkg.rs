@@ -1,9 +1,6 @@
 use clap::{Args, Subcommand};
-use hdk_firmware::pkg::{
-    PkgContentType, PkgDrmType, PkgPlatform, PkgReleaseType, structs::PkgEntryType,
-};
+use hdk_firmware::pkg::{PkgBuilder, PkgContentType, PkgDrmType, PkgPlatform, PkgReleaseType};
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
 use crate::commands::{Execute, IOArgs, Input, common};
 
@@ -140,51 +137,50 @@ impl Pkg {
             parts.join("/")
         }
 
-        struct PkgEntry {
-            path_str: String,
-            abs_path: Option<PathBuf>,
-            entry_type: PkgEntryType,
-        }
+        fn add_directory_recursive(
+            builder: &mut PkgBuilder,
+            base_path: &Path,
+            rel_path: &Path,
+        ) -> Result<(), String> {
+            let full_path = base_path.join(rel_path);
 
-        let mut entries = Vec::new();
-        for entry in WalkDir::new(input).min_depth(1) {
-            let entry = entry.map_err(|e| format!("failed to read directory entry: {e}"))?;
-            let rel_path = entry
-                .path()
-                .strip_prefix(input)
-                .map_err(|e| format!("failed to get relative path: {e}"))?;
+            // Read directory entries
+            let mut entries: Vec<_> = std::fs::read_dir(&full_path)
+                .map_err(|e| format!("failed to read directory: {e}"))?
+                .filter_map(|e| e.ok())
+                .collect();
 
-            let path_str = pkg_path_string(rel_path);
-            if entry.file_type().is_dir() {
-                entries.push(PkgEntry {
-                    path_str,
-                    abs_path: None,
-                    entry_type: PkgEntryType::Folder,
-                });
-            } else if entry.file_type().is_file() {
-                entries.push(PkgEntry {
-                    path_str,
-                    abs_path: Some(entry.path().to_path_buf()),
-                    entry_type: PkgEntryType::Regular,
-                });
+            // Sort so results are deterministic
+            entries.sort_by_key(|e| e.file_name());
+
+            // Add files first
+            for entry in &entries {
+                if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                    let entry_rel = rel_path.join(entry.file_name());
+                    let entry_pkg = pkg_path_string(&entry_rel);
+                    let data = std::fs::read(entry.path())
+                        .map_err(|e| format!("failed to read {}: {e}", entry_pkg))?;
+                    builder.add_file(&entry_pkg, data);
+                    println!("Added file: {}", entry_pkg);
+                }
             }
-        }
 
-        entries.sort_by(|a, b| a.path_str.cmp(&b.path_str));
-
-        for entry in entries {
-            if entry.entry_type == PkgEntryType::Folder {
-                builder.add_directory(&entry.path_str);
-            } else {
-                let abs_path = entry
-                    .abs_path
-                    .as_ref()
-                    .ok_or_else(|| "missing file path for PKG entry".to_string())?;
-                let data = common::read_file_bytes(abs_path)?;
-                builder.add_file(&entry.path_str, data);
-                println!("Added: {} ({:#?})", entry.path_str, entry.entry_type);
+            // Then add directories and recurse
+            for entry in &entries {
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    let entry_rel = rel_path.join(entry.file_name());
+                    let entry_pkg = pkg_path_string(&entry_rel);
+                    builder.add_directory(&entry_pkg);
+                    println!("Added dir: {}", entry_pkg);
+                    add_directory_recursive(builder, base_path, &entry_rel)?;
+                }
             }
+
+            Ok(())
         }
+
+        // Then call it:
+        add_directory_recursive(&mut builder, input, Path::new(""))?;
 
         let output_file = common::create_output_file(output)?;
         let mut output_file = std::io::BufWriter::new(output_file);
@@ -217,7 +213,7 @@ pub struct PkgCreateArgs {
     pub title_id: String,
 
     /// PKG release type (debug, release)
-    #[clap(long, default_value = "release")]
+    #[clap(long, default_value = "debug")]
     pub release_type: String,
 
     /// PKG DRM type (free, local, network, pspgo, none)
