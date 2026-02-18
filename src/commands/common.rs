@@ -79,6 +79,12 @@ pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf)>, Stri
             continue;
         }
 
+        // If the filename is `.time`, ignore it.
+        if entry.file_name() == ".time" {
+            println!("Skipping .time file: {}", entry.path().display());
+            continue;
+        }
+
         let abs_path = entry.path().to_path_buf();
         let rel_path = entry
             .path()
