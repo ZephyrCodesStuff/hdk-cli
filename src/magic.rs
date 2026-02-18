@@ -15,7 +15,7 @@ fn archive_matcher(buf: &[u8]) -> bool {
     use hdk_archive::structs::ARCHIVE_MAGIC;
 
     let magic = &buf[0..4];
-    return magic == ARCHIVE_MAGIC.to_le_bytes() || magic == ARCHIVE_MAGIC.to_be_bytes();
+    magic == ARCHIVE_MAGIC.to_le_bytes() || magic == ARCHIVE_MAGIC.to_be_bytes()
 }
 
 /// Convenience function to extract the archive version from the header bytes, if it matches the archive magic.
@@ -40,7 +40,7 @@ fn extract_version(buf: &[u8]) -> Option<ArchiveVersion> {
     };
 
     let version: u16 = (version_and_flags >> 16) as u16;
-    return ArchiveVersion::try_from(version).ok();
+    ArchiveVersion::try_from(version).ok()
 }
 
 /// SHARC archive matcher based on the magic value in the header.
@@ -59,7 +59,7 @@ fn sharc_matcher(buf: &[u8]) -> bool {
         return version == ArchiveVersion::SHARC;
     }
 
-    return false;
+    false
 }
 
 /// BAR archive matcher based on the magic value in the header.
@@ -78,7 +78,7 @@ fn bar_matcher(buf: &[u8]) -> bool {
         return version == ArchiveVersion::BAR;
     }
 
-    return false;
+    false
 }
 
 /// EdgeLZMA segmented compression matcher
@@ -97,7 +97,7 @@ fn sdat_matcher(buf: &[u8]) -> bool {
         return false;
     }
 
-    // SDAT files start with "Sdat" in ASCII
+    // SDAT files start with "NPD" in ASCII
     let magic_start = &buf[0..3] == b"NPD";
 
     // Get the last 32 bytes and check if `SDATA` appears in it
@@ -105,7 +105,7 @@ fn sdat_matcher(buf: &[u8]) -> bool {
         .windows(5)
         .any(|window| window == b"SDATA");
 
-    return magic_start && magic_end;
+    magic_start && magic_end
 }
 
 // Type alias to represent MIME types

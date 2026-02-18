@@ -59,15 +59,15 @@ pub enum KnownFileType {
 
 impl KnownFileType {
     /// Returns all variants for brute-force iteration.
-    pub fn all() -> &'static [KnownFileType] {
+    pub const fn all() -> &'static [Self] {
         &[
-            KnownFileType::Odc,
-            KnownFileType::Xml,
-            KnownFileType::SceneList,
-            KnownFileType::Lua,
-            KnownFileType::Bar,
-            KnownFileType::Pem,
-            KnownFileType::Hcdb,
+            Self::Odc,
+            Self::Xml,
+            Self::SceneList,
+            Self::Lua,
+            Self::Bar,
+            Self::Pem,
+            Self::Hcdb,
         ]
     }
 
@@ -75,16 +75,16 @@ impl KnownFileType {
     ///
     /// Returns `None` for types that require brute-forcing part of the header
     /// (e.g. [`KnownFileType::Hcdb`]).
-    pub fn known_plaintext(&self) -> Option<[u8; 8]> {
+    pub const fn known_plaintext(&self) -> Option<[u8; 8]> {
         match self {
-            KnownFileType::Odc => Some([0xEF, 0xBB, 0xBF, 0x3C, 0x3F, 0x78, 0x6D, 0x6C]),
-            KnownFileType::Xml => Some(*b"<?xml ve"),
-            KnownFileType::SceneList => Some(*b"<SCENELI"),
-            KnownFileType::Lua => Some(*b"LoadLibr"),
-            KnownFileType::Bar => Some([0xE1, 0x17, 0xEF, 0xAD, 0x00, 0x00, 0x00, 0x01]),
-            KnownFileType::Pem => Some(*b"-----BEG"),
+            Self::Odc => Some([0xEF, 0xBB, 0xBF, 0x3C, 0x3F, 0x78, 0x6D, 0x6C]),
+            Self::Xml => Some(*b"<?xml ve"),
+            Self::SceneList => Some(*b"<SCENELI"),
+            Self::Lua => Some(*b"LoadLibr"),
+            Self::Bar => Some([0xE1, 0x17, 0xEF, 0xAD, 0x00, 0x00, 0x00, 0x01]),
+            Self::Pem => Some(*b"-----BEG"),
             // HCDB has a 2-byte segment count at bytes 6-7 that is unknown — use brute_force_hcdb_iv instead.
-            KnownFileType::Hcdb => None,
+            Self::Hcdb => None,
         }
     }
 }
@@ -157,7 +157,7 @@ fn status_heuristic(data: &[u8]) -> Heuristic {
         return Heuristic::Decrypted(HeuristicReason::MagicBytes((t.mime_type(), t.extension())));
     }
 
-    let entropy = entropy::shannon_entropy(data) as f32;
+    let entropy = entropy::shannon_entropy(data);
     if entropy > ENTROPY_THRESHOLD {
         Heuristic::Encrypted(HeuristicReason::HighEntropy)
     } else {
