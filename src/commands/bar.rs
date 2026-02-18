@@ -5,6 +5,7 @@ use crate::{
     keys::{BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY},
 };
 use clap::Subcommand;
+use hdk_archive::structs::ArchiveFlags;
 use hdk_secure::hash::AfsHash;
 
 #[derive(Subcommand, Debug)]
@@ -32,12 +33,10 @@ impl Execute for Bar {
 
 impl Bar {
     pub fn create(input: &Path, output: &Path) -> Result<(), String> {
-        let mut archive_writer = hdk_archive::bar::writer::BarWriter::new(
-            Vec::new(),
-            BAR_DEFAULT_KEY,
-            BAR_SIGNATURE_KEY,
-        )
-        .unwrap();
+        let mut archive_writer = hdk_archive::bar::writer::BarWriter::default()
+            .with_default_key(BAR_DEFAULT_KEY)
+            .with_signature_key(BAR_SIGNATURE_KEY)
+            .with_flags(ArchiveFlags::Protected.into());
 
         let files = common::collect_input_files(input)?;
 
@@ -87,12 +86,12 @@ impl Bar {
                 .map_err(|e| format!("failed to add entry: {e}"))?;
         }
 
-        let archive_bytes = archive_writer
+        let mut archive_bytes = archive_writer
             .finish()
             .map_err(|e| format!("failed to finalize BAR: {e}"))?;
 
         let output_file = common::create_output_file(output)?;
-        std::io::copy(&mut &archive_bytes[..], &mut &output_file)
+        std::io::copy(&mut archive_bytes, &mut &output_file)
             .map_err(|e| format!("failed to write archive: {e}"))?;
 
         println!("Created BAR archive: {}", output.display());

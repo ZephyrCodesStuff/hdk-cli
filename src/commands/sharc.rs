@@ -2,7 +2,10 @@ use std::path::Path;
 
 use crate::commands::{Execute, IOArgs, common};
 use clap::Subcommand;
-use hdk_archive::{sharc::writer::SharcWriter, structs::Endianness};
+use hdk_archive::{
+    sharc::writer::SharcWriter,
+    structs::{ArchiveFlags, Endianness},
+};
 use hdk_secure::hash::AfsHash;
 
 #[derive(Subcommand, Debug)]
@@ -35,7 +38,8 @@ impl Sharc {
 
         let mut archive_writer = SharcWriter::default()
             .with_key(crate::keys::SHARC_DEFAULT_KEY)
-            .with_endianess(endianess);
+            .with_endianess(endianess)
+            .with_flags(ArchiveFlags::Protected.into());
 
         let files = common::collect_input_files(input)?;
 

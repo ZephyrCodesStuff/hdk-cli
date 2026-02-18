@@ -1,4 +1,5 @@
 use clap::Subcommand;
+use hdk_archive::structs::{ArchiveFlags, Endianness};
 use hdk_secure::hash::AfsHash;
 use std::path::Path;
 
@@ -62,12 +63,12 @@ impl Sdat {
     pub fn create(input: &Path, output: &Path) -> Result<(), String> {
         // TODO: let user pick if SHARC or BAR
         // TODO: let user pick endianness
-        let mut archive_writer = hdk_archive::sharc::writer::SharcWriter::new(
-            Vec::new(),
-            crate::keys::SHARC_SDAT_KEY,
-            hdk_archive::structs::Endianness::Big,
-        )
-        .map_err(|e| format!("failed to create SHARC writer: {e}"))?;
+        let endianess = Endianness::Big;
+
+        let mut archive_writer = hdk_archive::sharc::writer::SharcWriter::default()
+            .with_key(crate::keys::SHARC_SDAT_KEY)
+            .with_endianess(endianess)
+            .with_flags(ArchiveFlags::Protected.into());
 
         let files = common::collect_input_files(input)?;
 
@@ -136,7 +137,7 @@ impl Sdat {
             .map_err(|e| format!("failed to create SDAT writer: {e}"))?;
 
         let sdat_bytes = sdat
-            .write_to_vec(&archive_bytes)
+            .write_from_reader_to_vec(archive_bytes)
             .map_err(|e| format!("failed to write SDAT: {e}"))?;
 
         // Write SDAT to output file
