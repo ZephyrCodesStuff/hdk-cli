@@ -7,7 +7,7 @@ use crate::{
 use clap::{Args, Subcommand, ValueEnum};
 use ctr::cipher::KeyIvInit;
 use hdk_secure::{
-    modes::{BlowfishEcbDec, BlowfishPS3},
+    modes::{BlowfishEcb, BlowfishEcbDec, BlowfishPS3},
     reader::CryptoReader,
 };
 
@@ -53,6 +53,8 @@ pub enum KnownFileType {
     Bar,
     /// PEM certificate (`-----BEG`)
     Pem,
+    /// HCDB database (`segs` + `0x01 0x05` + 2-byte segment count — brute-forced)
+    Hcdb,
 }
 
 impl KnownFileType {
@@ -65,18 +67,24 @@ impl KnownFileType {
             KnownFileType::Lua,
             KnownFileType::Bar,
             KnownFileType::Pem,
+            KnownFileType::Hcdb,
         ]
     }
 
     /// The known first 8 plaintext bytes for this file type.
-    pub fn known_plaintext(&self) -> [u8; 8] {
+    ///
+    /// Returns `None` for types that require brute-forcing part of the header
+    /// (e.g. [`KnownFileType::Hcdb`]).
+    pub fn known_plaintext(&self) -> Option<[u8; 8]> {
         match self {
-            KnownFileType::Odc => [0xEF, 0xBB, 0xBF, 0x3C, 0x3F, 0x78, 0x6D, 0x6C],
-            KnownFileType::Xml => *b"<?xml ve",
-            KnownFileType::SceneList => *b"<SCENELI",
-            KnownFileType::Lua => *b"LoadLibr",
-            KnownFileType::Bar => [0xE1, 0x17, 0xEF, 0xAD, 0x00, 0x00, 0x00, 0x01],
-            KnownFileType::Pem => *b"-----BEG",
+            KnownFileType::Odc => Some([0xEF, 0xBB, 0xBF, 0x3C, 0x3F, 0x78, 0x6D, 0x6C]),
+            KnownFileType::Xml => Some(*b"<?xml ve"),
+            KnownFileType::SceneList => Some(*b"<SCENELI"),
+            KnownFileType::Lua => Some(*b"LoadLibr"),
+            KnownFileType::Bar => Some([0xE1, 0x17, 0xEF, 0xAD, 0x00, 0x00, 0x00, 0x01]),
+            KnownFileType::Pem => Some(*b"-----BEG"),
+            // HCDB has a 2-byte segment count at bytes 6-7 that is unknown — use brute_force_hcdb_iv instead.
+            KnownFileType::Hcdb => None,
         }
     }
 }
@@ -96,7 +104,6 @@ pub enum Crypt {
     Auto(AutoArgs),
 }
 
-// TODO: implement this
 impl Execute for Crypt {
     fn execute(self) {
         let result = match self {
@@ -197,6 +204,90 @@ fn recover_iv(
     Ok(block)
 }
 
+// ---------------------------------------------------------------------------
+// HCDB brute-force IV recovery
+// ---------------------------------------------------------------------------
+
+/// The known prefix of an HCDB plaintext header (bytes 0-5).
+///
+/// Layout: `b"segs"` (4 bytes) + version `0x01 0x05` (2 bytes) + segment count (2 bytes, unknown).
+const HCDB_KNOWN_PREFIX: [u8; 6] = [b's', b'e', b'g', b's', 0x01, 0x05];
+
+/// Maximum plausible segment count to search for HCDB brute-force.
+const HCDB_MAX_SEGMENTS: u16 = u16::MAX;
+
+/// Brute-force the 2-byte HCDB segment count to recover the Blowfish-CTR IV.
+///
+/// HCDB plaintext header bytes 0-7 are: `segs 0x01 0x05 <count_hi> <count_lo>`.
+/// The segment count occupies bytes 6-7 and is unknown, so we try all 65536 values.
+///
+/// Verification oracle: decrypt the first 16 bytes with each candidate IV and check
+/// that the `u32` at plaintext bytes 12-15 (big-endian) equals the total file size.
+fn brute_force_hcdb_iv(key: &[u8; 32], ciphertext: &[u8]) -> Result<(u16, [u8; 8]), String> {
+    if ciphertext.len() < 16 {
+        return Err("HCDB ciphertext too short (need at least 16 bytes)".to_string());
+    }
+
+    let file_size = ciphertext.len() as u32;
+
+    // We need to CTR-decrypt only the first 16 bytes for each candidate.
+    // CTR keystream: block 0 = ECB(IV), block 1 = ECB(IV+1).
+    // Decrypt those two Blowfish ECB blocks once per candidate.
+    use ctr::cipher::{BlockDecryptMut, BlockEncryptMut, KeyInit, block_padding::NoPadding};
+
+    for seg_count in 0u16..=HCDB_MAX_SEGMENTS {
+        // Build the 8-byte known-plaintext candidate.
+        let mut known = [0u8; 8];
+        known[..6].copy_from_slice(&HCDB_KNOWN_PREFIX);
+        known[6..8].copy_from_slice(&seg_count.to_be_bytes());
+
+        // Step 1: XOR with ciphertext[0..8] to get ECB_k(IV).
+        let mut ecb_iv = [0u8; 8];
+        for i in 0..8 {
+            ecb_iv[i] = known[i] ^ ciphertext[i];
+        }
+
+        // Step 2: ECB-decrypt to recover the raw IV.
+        let ecb_dec = BlowfishEcbDec::new_from_slice(key)
+            .map_err(|e| format!("ECB cipher init failed: {e}"))?;
+        let mut iv_candidate = ecb_iv;
+        ecb_dec
+            .decrypt_padded_mut::<NoPadding>(&mut iv_candidate)
+            .map_err(|e| format!("ECB decrypt failed: {e}"))?;
+
+        // Step 3: CTR-decrypt the first 16 bytes using the candidate IV.
+        //
+        // CTR keystream bytes 0-15 = ECB_k(IV) || ECB_k(IV+1).
+        // We already have ECB_k(IV) = ecb_iv (before the ECB-decrypt step above).
+        // Compute ECB_k(IV+1) on the fly.
+        let iv_plus_one = (u64::from_be_bytes(iv_candidate).wrapping_add(1)).to_be_bytes();
+        let ecb_enc =
+            BlowfishEcb::new_from_slice(key).map_err(|e| format!("ECB enc init failed: {e}"))?;
+        let mut keystream_block1 = iv_plus_one;
+        ecb_enc
+            .encrypt_padded_mut::<NoPadding>(&mut keystream_block1, 8)
+            .map_err(|e| format!("ECB encrypt failed: {e}"))?;
+
+        let mut plain16 = [0u8; 16];
+        for i in 0..8 {
+            plain16[i] = ciphertext[i] ^ ecb_iv[i];
+            plain16[i + 8] = ciphertext[i + 8] ^ keystream_block1[i];
+        }
+
+        // Step 4: Oracle — bytes 12-15 of HCDB plaintext are the file size (BE u32).
+        let size_field = u32::from_be_bytes(plain16[12..16].try_into().unwrap());
+        if size_field == file_size {
+            eprintln!(
+                "  [Hcdb] found segment count = {seg_count}, IV = {:02x?}",
+                iv_candidate
+            );
+            return Ok((seg_count, iv_candidate));
+        }
+    }
+
+    Err("HCDB brute-force exhausted all segment counts without a match".to_string())
+}
+
 /// CTR-decrypt `data` in-place using the given key and IV.
 fn ctr_decrypt_inplace(key: &[u8; 32], iv: &[u8; 8], data: &mut Vec<u8>) -> Result<(), String> {
     use std::io::Read;
@@ -272,12 +363,30 @@ pub fn decrypt_file(
         .unwrap_or_else(|| KnownFileType::all());
 
     for file_type in candidates {
-        let known = file_type.known_plaintext();
-        let iv = match recover_iv(key, &data, &known) {
-            Ok(iv) => iv,
-            Err(e) => {
-                eprintln!("  [{file_type:?}] IV recovery failed: {e}");
-                continue;
+        // HCDB has an unknown 2-byte segment count in its header, so we brute-force
+        // all 65536 values and use a size-field oracle rather than the generic KPA path.
+        let (iv, verified_by_oracle) = if *file_type == KnownFileType::Hcdb {
+            eprintln!("  [Hcdb] brute-forcing segment count (0..=65535)…");
+            match brute_force_hcdb_iv(key, &data) {
+                // The brute-force already confirmed correctness via the file-size oracle,
+                // so we can skip the entropy check for this type.
+                Ok((_seg_count, iv)) => (iv, true),
+                Err(e) => {
+                    eprintln!("  [Hcdb] brute-force failed: {e}");
+                    continue;
+                }
+            }
+        } else {
+            let known = match file_type.known_plaintext() {
+                Some(k) => k,
+                None => continue, // should not happen for non-Hcdb types
+            };
+            match recover_iv(key, &data, &known) {
+                Ok(iv) => (iv, false),
+                Err(e) => {
+                    eprintln!("  [{file_type:?}] IV recovery failed: {e}");
+                    continue;
+                }
             }
         };
 
@@ -287,34 +396,50 @@ pub fn decrypt_file(
             continue;
         }
 
-        // Verification: we CANNOT use magic bytes here because the KPA forces
-        // the first 8 bytes of every attempt to equal `known_plaintext` — so
-        // magic would always match regardless of whether the IV was correct.
-        //
-        // Instead we compare the entropy of the body (bytes 8..) before and
-        // after decryption.  A genuine decryption causes a clear entropy drop;
-        // a wrong candidate just shuffles noise into different noise.
-        let body_start = 8.min(data.len());
-        let entropy_before = entropy::shannon_entropy(&data[body_start..]) as f32;
-        let entropy_after = entropy::shannon_entropy(&attempt[body_start..]) as f32;
-        let drop = entropy_before - entropy_after;
-
-        eprintln!(
-            "  [{file_type:?}] entropy {entropy_before:.3} → {entropy_after:.3} (drop {drop:.3})"
-        );
-
-        // Require a meaningful entropy drop — raw noise stays flat.
-        if drop >= ENTROPY_DROP_THRESHOLD {
+        // HCDB: the brute-force oracle already confirmed the IV is correct (it matched
+        // the file-size field), so skip entropy checking — HCDB bodies are EdgeLZMA-
+        // compressed and will still read as high-entropy after decryption.
+        let success = if verified_by_oracle {
             println!(
-                "Decrypted as {file_type:?} (entropy drop {drop:.3}), IV: {:02x?}",
+                "Decrypted as {file_type:?} (validated by file-size oracle), IV: {:02x?}",
                 iv
             );
+            true
+        } else {
+            // Verification: we CANNOT use magic bytes here because the KPA forces
+            // the first 8 bytes of every attempt to equal `known_plaintext` — so
+            // magic would always match regardless of whether the IV was correct.
+            //
+            // Instead we compare the entropy of the body (bytes 8..) before and
+            // after decryption.  A genuine decryption causes a clear entropy drop;
+            // a wrong candidate just shuffles noise into different noise.
+            let body_start = 8.min(data.len());
+            let entropy_before = entropy::shannon_entropy(&data[body_start..]) as f32;
+            let entropy_after = entropy::shannon_entropy(&attempt[body_start..]) as f32;
+            let drop = entropy_before - entropy_after;
+
+            eprintln!(
+                "  [{file_type:?}] entropy {entropy_before:.3} → {entropy_after:.3} (drop {drop:.3})"
+            );
+
+            if drop >= ENTROPY_DROP_THRESHOLD {
+                println!(
+                    "Decrypted as {file_type:?} (entropy drop {drop:.3}), IV: {:02x?}",
+                    iv
+                );
+                true
+            } else {
+                false
+            }
+        };
+
+        if success {
             std::fs::write(output, &attempt)
                 .map_err(|e| format!("Failed to write decrypted file: {e}"))?;
             println!("Decrypted → {}", output.display());
             return Ok(());
         }
-        // Not enough drop — wrong candidate, try the next one.
+        // Not a match — try the next candidate.
     }
 
     Err(format!(
