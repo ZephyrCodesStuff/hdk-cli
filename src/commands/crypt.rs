@@ -414,8 +414,8 @@ pub fn decrypt_file(
             // after decryption.  A genuine decryption causes a clear entropy drop;
             // a wrong candidate just shuffles noise into different noise.
             let body_start = 8.min(data.len());
-            let entropy_before = entropy::shannon_entropy(&data[body_start..]) as f32;
-            let entropy_after = entropy::shannon_entropy(&attempt[body_start..]) as f32;
+            let entropy_before = entropy::shannon_entropy(&data[body_start..]);
+            let entropy_after = entropy::shannon_entropy(&attempt[body_start..]);
             let drop = entropy_before - entropy_after;
 
             eprintln!(

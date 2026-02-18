@@ -1,6 +1,3 @@
-// Used for `.with_added_extension()` in `src/commands/map.rs`
-#![feature(path_add_extension)]
-
 use clap::Parser;
 
 mod commands;
