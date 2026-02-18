@@ -11,6 +11,7 @@ pub mod common;
 pub mod compress;
 pub mod crypt;
 pub mod map;
+pub mod pkg;
 pub mod sdat;
 pub mod sharc;
 
@@ -59,6 +60,17 @@ pub enum Command {
     /// Map files and restore original file structures
     #[command()]
     Map(Map),
+
+    /// PKG file operations
+    #[command(subcommand)]
+    Pkg(pkg::Pkg),
+}
+
+#[derive(Args, Debug)]
+pub struct Input {
+    /// Input file / folder path
+    #[clap(short, long)]
+    pub input: PathBuf,
 }
 
 /// Common input/output arguments for commands.

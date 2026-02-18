@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::commands::{Execute, IOArgs, common};
 
@@ -47,8 +47,8 @@ const SDAT_KEYS: hdk_sdat::SdatKeys = hdk_sdat::SdatKeys {
 impl Execute for Sdat {
     fn execute(self) {
         let function = match self {
-            Self::Create(args) => Sdat::create(&args.input, &args.output),
-            Self::Extract(args) => Sdat::extract(&args.input, &args.output),
+            Self::Create(args) => Self::create(&args.input, &args.output),
+            Self::Extract(args) => Self::extract(&args.input, &args.output),
         };
 
         if let Err(e) = function {
@@ -58,7 +58,7 @@ impl Execute for Sdat {
 }
 
 impl Sdat {
-    pub fn create(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
+    pub fn create(input: &Path, output: &Path) -> Result<(), String> {
         // TODO: let user pick if SHARC or BAR
         // TODO: let user pick endianness
         let mut archive_writer = hdk_archive::sharc::writer::SharcWriter::new(
@@ -131,7 +131,7 @@ impl Sdat {
         Ok(())
     }
 
-    pub fn extract(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
+    pub fn extract(input: &Path, output: &Path) -> Result<(), String> {
         // Open and read the SDAT file
         let file =
             std::fs::File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
@@ -170,7 +170,7 @@ impl Sdat {
 
         // Try BAR
         if let Ok(mut archive_reader) = hdk_archive::bar::reader::BarReader::open(
-            std::io::Cursor::new(archive_bytes.clone()),
+            std::io::Cursor::new(archive_bytes),
             crate::keys::BAR_DEFAULT_KEY,
             crate::keys::BAR_SIGNATURE_KEY,
             None,

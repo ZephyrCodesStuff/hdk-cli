@@ -607,6 +607,7 @@ dependencies = [
  "enum_dispatch",
  "hdk-archive",
  "hdk-comp",
+ "hdk-firmware",
  "hdk-sdat",
  "hdk-secure",
  "infer",
@@ -622,6 +623,20 @@ dependencies = [
  "byteorder",
  "flate2",
  "lzma-rust2",
+]
+
+[[package]]
+name = "hdk-firmware"
+version = "0.1.0"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#761a11276b6f2b7484c691d11e11023fb24a130f"
+dependencies = [
+ "aes",
+ "byteorder",
+ "cbc",
+ "ctr",
+ "flate2",
+ "sha1_smol",
+ "thiserror",
 ]
 
 [[package]]

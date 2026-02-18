@@ -60,7 +60,7 @@ impl Execute for Map {
 
         println!("Mapped {} files.", result.mapped);
 
-        if result.not_found.len() > 0 {
+        if !result.not_found.is_empty() {
             println!("{} files could not be mapped:", result.not_found.len());
             for file in result.not_found {
                 println!(" - {}", file.display());

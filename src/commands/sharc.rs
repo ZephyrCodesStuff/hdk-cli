@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::commands::{Execute, IOArgs, common};
 use clap::Subcommand;
@@ -17,8 +17,8 @@ pub enum Sharc {
 impl Execute for Sharc {
     fn execute(self) {
         let result = match self {
-            Self::Create(args) => Sharc::create(&args.input, &args.output),
-            Self::Extract(args) => Sharc::extract(&args.input, &args.output),
+            Self::Create(args) => Self::create(&args.input, &args.output),
+            Self::Extract(args) => Self::extract(&args.input, &args.output),
         };
 
         if let Err(e) = result {
@@ -28,7 +28,7 @@ impl Execute for Sharc {
 }
 
 impl Sharc {
-    pub fn create(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
+    pub fn create(input: &Path, output: &Path) -> Result<(), String> {
         // TODO: let user pick endianness
         let endianess = Endianness::Big;
 
@@ -81,7 +81,7 @@ impl Sharc {
         Ok(())
     }
 
-    pub fn extract(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
+    pub fn extract(input: &Path, output: &Path) -> Result<(), String> {
         let file =
             std::fs::File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
 

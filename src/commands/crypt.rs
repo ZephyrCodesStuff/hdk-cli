@@ -96,6 +96,7 @@ pub enum Crypt {
     Auto(AutoArgs),
 }
 
+// TODO: implement this
 impl Execute for Crypt {
     fn execute(self) {
         let result = match self {

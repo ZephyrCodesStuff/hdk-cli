@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Seek, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::commands::{Execute, common};
 use clap::{Subcommand, ValueEnum};
@@ -72,7 +72,7 @@ impl Execute for Compress {
     }
 }
 
-fn compress(input: &PathBuf, output: &PathBuf, algorithm: Algorithm) -> Result<(), String> {
+fn compress(input: &Path, output: &Path, algorithm: Algorithm) -> Result<(), String> {
     let input_file = File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
     let mut reader = BufReader::new(input_file);
 
@@ -94,7 +94,7 @@ fn compress(input: &PathBuf, output: &PathBuf, algorithm: Algorithm) -> Result<(
     Ok(())
 }
 
-fn decompress(input: &PathBuf, output: &PathBuf, algorithm: Algorithm) -> Result<(), String> {
+fn decompress(input: &Path, output: &Path, algorithm: Algorithm) -> Result<(), String> {
     let input_file = File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
     let reader = BufReader::new(input_file);
 
