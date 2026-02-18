@@ -155,9 +155,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.19.1"
+version = "3.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dd9dc738b7a8311c7ade152424974d8115f2cdad61e8dab8dac9f2362298510"
+checksum = "c81d250916401487680ed13b8b675660281dcfc3ab0121fe44c94bcab9eae2fb"
 
 [[package]]
 name = "bytemuck"
@@ -579,7 +579,7 @@ checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 [[package]]
 name = "hdk-archive"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#519b0bc23076326a7495639d9e426ea187c93489"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#923309ddeed56c672f4dff5fcd88db69ee3f2db9"
 dependencies = [
  "aes",
  "binrw",
@@ -618,7 +618,7 @@ dependencies = [
 [[package]]
 name = "hdk-comp"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#519b0bc23076326a7495639d9e426ea187c93489"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#923309ddeed56c672f4dff5fcd88db69ee3f2db9"
 dependencies = [
  "byteorder",
  "flate2",
@@ -628,7 +628,7 @@ dependencies = [
 [[package]]
 name = "hdk-firmware"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#519b0bc23076326a7495639d9e426ea187c93489"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#923309ddeed56c672f4dff5fcd88db69ee3f2db9"
 dependencies = [
  "aes",
  "byteorder",
@@ -642,7 +642,7 @@ dependencies = [
 [[package]]
 name = "hdk-sdat"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#519b0bc23076326a7495639d9e426ea187c93489"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#923309ddeed56c672f4dff5fcd88db69ee3f2db9"
 dependencies = [
  "aes",
  "binrw",
@@ -655,7 +655,7 @@ dependencies = [
 [[package]]
 name = "hdk-secure"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#519b0bc23076326a7495639d9e426ea187c93489"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#923309ddeed56c672f4dff5fcd88db69ee3f2db9"
 dependencies = [
  "byteorder",
  "cbc",
