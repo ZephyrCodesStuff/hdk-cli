@@ -57,6 +57,8 @@ pub fn create_output_dir(path: &Path) -> Result<(), String> {
 }
 
 /// Collects all files in a directory (recursively) or returns a single file.
+///
+/// TODO: calculate hashes here so that we can use them readily when making the archive
 pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf)>, String> {
     if input.is_file() {
         let file_name = input
