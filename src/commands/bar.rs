@@ -5,6 +5,7 @@ use crate::{
     keys::{BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY},
 };
 use clap::Subcommand;
+use hdk_secure::hash::AfsHash;
 
 #[derive(Subcommand, Debug)]
 pub enum Bar {
@@ -58,7 +59,22 @@ impl Bar {
 
         for (abs_path, rel_path) in files {
             let data = common::read_file_bytes(&abs_path)?;
-            let name_hash = hdk_secure::hash::AfsHash::new_from_path(&rel_path);
+
+            // Determine the name hash:
+            //
+            // - If the relative path is an 8-character hex string, treat it as an unmapped hash and parse it directly.
+            // - Otherwise, normalize the path (lowercase + forward slashes) and hash it as a mapped entry.
+            let raw_path_str = rel_path.to_string_lossy();
+            let name_hash =
+                if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                    // UNMAPPED: Parse the 8-character hex string directly back into an i32
+                    let hash_val = u32::from_str_radix(&raw_path_str, 16).unwrap();
+                    AfsHash(hash_val as i32)
+                } else {
+                    // MAPPED: Normalize the real path (lowercase + forward slashes) and hash it
+                    let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
+                    AfsHash::new_from_str(&clean_path)
+                };
 
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
