@@ -72,3 +72,11 @@ pub struct IOArgs {
     #[clap(short, long)]
     pub output: PathBuf,
 }
+
+/// Common input arguments for commands that only require an input path.
+#[derive(Args, Debug)]
+pub struct IArg {
+    /// Input file / folder path
+    #[clap(short, long)]
+    pub input: PathBuf,
+}

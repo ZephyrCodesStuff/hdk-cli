@@ -1,21 +1,356 @@
-use crate::commands::Execute;
-use clap::Subcommand;
+use std::path::PathBuf;
+
+use crate::{
+    commands::{Execute, IOArgs},
+    magic::MimeType,
+};
+use clap::{Args, Subcommand, ValueEnum};
+use ctr::cipher::KeyIvInit;
+use hdk_secure::{
+    modes::{BlowfishEcbDec, BlowfishPS3},
+    reader::CryptoReader,
+};
+
+#[derive(Args, Debug)]
+pub struct DecryptArgs {
+    #[clap(flatten)]
+    pub io: IOArgs,
+
+    /// Hint the expected plaintext file type for the known-plaintext IV recovery.
+    ///
+    /// If omitted, all known types are tried automatically.
+    #[clap(short = 't', long = "type", value_enum)]
+    pub file_type: Option<KnownFileType>,
+}
+
+#[derive(Args, Debug)]
+pub struct AutoArgs {
+    /// Input file path (will be decrypted or encrypted in-place, writing to a .dec / .enc sibling)
+    #[clap(short, long)]
+    pub input: PathBuf,
+
+    /// Hint the expected plaintext file type for the known-plaintext IV recovery.
+    ///
+    /// If omitted, all known types are tried automatically.
+    #[clap(short = 't', long = "type", value_enum)]
+    pub file_type: Option<KnownFileType>,
+}
+
+/// Known plaintext file types whose first 8 bytes are well-defined.
+///
+/// These are used for the known-plaintext attack to recover the Blowfish CTR IV.
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KnownFileType {
+    /// ODC / SDC XML (UTF-8 BOM + `<?xm`)
+    Odc,
+    /// Raw `<?xml ve` XML
+    Xml,
+    /// `<SCENELI` scene list XML
+    SceneList,
+    /// `LoadLibr` Lua script
+    Lua,
+    /// BAR archive (`0xE1 0x17 0xEF 0xAD ...`)
+    Bar,
+    /// PEM certificate (`-----BEG`)
+    Pem,
+}
+
+impl KnownFileType {
+    /// Returns all variants for brute-force iteration.
+    pub fn all() -> &'static [KnownFileType] {
+        &[
+            KnownFileType::Odc,
+            KnownFileType::Xml,
+            KnownFileType::SceneList,
+            KnownFileType::Lua,
+            KnownFileType::Bar,
+            KnownFileType::Pem,
+        ]
+    }
+
+    /// The known first 8 plaintext bytes for this file type.
+    pub fn known_plaintext(&self) -> [u8; 8] {
+        match self {
+            KnownFileType::Odc => [0xEF, 0xBB, 0xBF, 0x3C, 0x3F, 0x78, 0x6D, 0x6C],
+            KnownFileType::Xml => *b"<?xml ve",
+            KnownFileType::SceneList => *b"<SCENELI",
+            KnownFileType::Lua => *b"LoadLibr",
+            KnownFileType::Bar => [0xE1, 0x17, 0xEF, 0xAD, 0x00, 0x00, 0x00, 0x01],
+            KnownFileType::Pem => *b"-----BEG",
+        }
+    }
+}
 
 #[derive(Subcommand, Debug)]
 pub enum Crypt {
     /// Encrypt a file
     #[clap(alias = "e")]
-    Encrypt,
-    /// Decrypt a file
+    Encrypt(IOArgs),
+    /// Decrypt a file using known-plaintext IV recovery
     #[clap(alias = "d")]
-    Decrypt,
+    Decrypt(DecryptArgs),
+    /// Automatic mode: detects if the file is encrypted or decrypted and performs the opposite action
+    ///
+    /// This is a really magical way to use the CLI!
+    #[clap(alias = "a")]
+    Auto(AutoArgs),
 }
 
 impl Execute for Crypt {
     fn execute(self) {
-        match self {
-            Self::Encrypt => println!("Encrypting file..."),
-            Self::Decrypt => println!("Decrypting file..."),
+        let result = match self {
+            Self::Encrypt(ref args) => encrypt_file(&args.input, &args.output),
+            Self::Decrypt(ref args) => {
+                decrypt_file(&args.io.input, &args.io.output, args.file_type)
+            }
+            Self::Auto(ref args) => auto_crypt(&args.input, args.file_type),
+        };
+
+        if let Err(e) = result {
+            eprintln!("Error: {e}");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Heuristic helpers
+// ---------------------------------------------------------------------------
+
+/// Status of the file based on entropy / magic analysis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Heuristic {
+    Encrypted(HeuristicReason),
+    Decrypted(HeuristicReason),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum HeuristicReason {
+    /// Recognizable magic bytes were found.
+    MagicBytes(MimeType),
+    /// Shannon entropy is above the threshold.
+    HighEntropy,
+    /// Shannon entropy is below the threshold.
+    LowEntropy,
+}
+
+/// Minimum Shannon entropy (bits/byte) to treat data as encrypted.
+const ENTROPY_THRESHOLD: f32 = 7.5;
+
+/// Minimum entropy drop (bits/byte) after decryption to consider it successful.
+///
+/// Unsuccessful decryption will cause change within ~0.1 bits/byte due to noise shuffling,
+/// so this is a pretty safe threshold.
+const ENTROPY_DROP_THRESHOLD: f32 = 1.0;
+
+fn status_heuristic(data: &[u8]) -> Heuristic {
+    let matcher = crate::magic::get_matcher();
+
+    if let Some(t) = matcher.get(data) {
+        return Heuristic::Decrypted(HeuristicReason::MagicBytes((t.mime_type(), t.extension())));
+    }
+
+    let entropy = entropy::shannon_entropy(data) as f32;
+    if entropy > ENTROPY_THRESHOLD {
+        Heuristic::Encrypted(HeuristicReason::HighEntropy)
+    } else {
+        Heuristic::Decrypted(HeuristicReason::LowEntropy)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Known-plaintext IV recovery
+// ---------------------------------------------------------------------------
+
+/// Recover the Blowfish-CTR IV from the ciphertext using a known-plaintext attack.
+///
+/// Blowfish-CTR (PS3 variant) produces its first keystream block by ECB-encrypting
+/// the IV.  Since `ciphertext[0..8] = plaintext[0..8] XOR ECB(IV)`, we can recover
+/// `ECB(IV)` by XOR-ing, then ECB-*decrypt* to get the original IV.
+fn recover_iv(
+    key: &[u8; 32],
+    ciphertext: &[u8],
+    known_plaintext: &[u8; 8],
+) -> Result<[u8; 8], String> {
+    if ciphertext.len() < 8 {
+        return Err("Ciphertext too short for IV recovery".to_string());
+    }
+
+    // Step 1: XOR known plaintext against the first ciphertext block → ECB(IV)
+    let mut ecb_iv = [0u8; 8];
+    for i in 0..8 {
+        ecb_iv[i] = known_plaintext[i] ^ ciphertext[i];
+    }
+
+    // Step 2: ECB-decrypt the block to get the raw IV.
+    //
+    // `BlowfishEcbDec` is `ecb::Decryptor<Blowfish>` and operates on 8-byte blocks.
+    use ctr::cipher::{BlockDecryptMut, KeyInit, block_padding::NoPadding};
+    let ecb_cipher = BlowfishEcbDec::new_from_slice(key)
+        .map_err(|e| format!("Failed to create ECB cipher: {e}"))?;
+
+    let mut block = ecb_iv;
+    ecb_cipher
+        .decrypt_padded_mut::<NoPadding>(&mut block)
+        .map_err(|e| format!("ECB decrypt failed: {e}"))?;
+
+    Ok(block)
+}
+
+/// CTR-decrypt `data` in-place using the given key and IV.
+fn ctr_decrypt_inplace(key: &[u8; 32], iv: &[u8; 8], data: &mut Vec<u8>) -> Result<(), String> {
+    use std::io::Read;
+
+    let cipher = BlowfishPS3::new(key.into(), iv.into());
+    let mut cursor = std::io::Cursor::new(data.as_slice());
+    let mut reader = CryptoReader::new(&mut cursor, cipher);
+
+    let mut decrypted = Vec::with_capacity(data.len());
+    reader
+        .read_to_end(&mut decrypted)
+        .map_err(|e| format!("CTR decrypt failed: {e}"))?;
+
+    *data = decrypted;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Public commands
+// ---------------------------------------------------------------------------
+
+/// Encrypt `input` → `output`.
+///
+/// The IV is derived from the SHA-1 hash of the plaintext (first 8 bytes of the digest).
+pub fn encrypt_file(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
+    use std::io::Read;
+
+    let data =
+        std::fs::read(input).map_err(|e| format!("Failed to read file for encryption: {e}"))?;
+
+    // Derive IV from SHA-1 of the plaintext.
+    let mut hasher = sha1_smol::Sha1::new();
+    hasher.update(&data);
+    let digest = hasher.digest().bytes();
+
+    let iv: [u8; 8] = digest[..8].try_into().unwrap();
+    println!("IV (from SHA-1): {:02x?}", iv);
+
+    let cipher = BlowfishPS3::new(&crate::keys::BLOWFISH_DEFAULT_KEY.into(), &iv.into());
+    let mut cursor = std::io::Cursor::new(data.as_slice());
+    let mut reader = CryptoReader::new(&mut cursor, cipher);
+
+    let mut encrypted = Vec::with_capacity(data.len());
+    reader
+        .read_to_end(&mut encrypted)
+        .map_err(|e| format!("Encryption failed: {e}"))?;
+
+    std::fs::write(output, &encrypted)
+        .map_err(|e| format!("Failed to write encrypted file: {e}"))?;
+
+    println!("Encrypted → {}", output.display());
+    Ok(())
+}
+
+/// Decrypt `input` → `output` using a known-plaintext attack to recover the IV.
+///
+/// If `hint` is given, only that plaintext header is tried.
+/// Otherwise every [`KnownFileType`] is attempted and the first that produces
+/// recognizable output is used.
+pub fn decrypt_file(
+    input: &PathBuf,
+    output: &PathBuf,
+    hint: Option<KnownFileType>,
+) -> Result<(), String> {
+    let data =
+        std::fs::read(input).map_err(|e| format!("Failed to read file for decryption: {e}"))?;
+
+    let key = &crate::keys::BLOWFISH_DEFAULT_KEY;
+
+    let candidates: &[KnownFileType] = hint
+        .as_ref()
+        .map(std::slice::from_ref)
+        .unwrap_or_else(|| KnownFileType::all());
+
+    for file_type in candidates {
+        let known = file_type.known_plaintext();
+        let iv = match recover_iv(key, &data, &known) {
+            Ok(iv) => iv,
+            Err(e) => {
+                eprintln!("  [{file_type:?}] IV recovery failed: {e}");
+                continue;
+            }
+        };
+
+        let mut attempt = data.clone();
+        if let Err(e) = ctr_decrypt_inplace(key, &iv, &mut attempt) {
+            eprintln!("  [{file_type:?}] CTR decrypt failed: {e}");
+            continue;
+        }
+
+        // Verification: we CANNOT use magic bytes here because the KPA forces
+        // the first 8 bytes of every attempt to equal `known_plaintext` — so
+        // magic would always match regardless of whether the IV was correct.
+        //
+        // Instead we compare the entropy of the body (bytes 8..) before and
+        // after decryption.  A genuine decryption causes a clear entropy drop;
+        // a wrong candidate just shuffles noise into different noise.
+        let body_start = 8.min(data.len());
+        let entropy_before = entropy::shannon_entropy(&data[body_start..]) as f32;
+        let entropy_after = entropy::shannon_entropy(&attempt[body_start..]) as f32;
+        let drop = entropy_before - entropy_after;
+
+        eprintln!(
+            "  [{file_type:?}] entropy {entropy_before:.3} → {entropy_after:.3} (drop {drop:.3})"
+        );
+
+        // Require a meaningful entropy drop — raw noise stays flat.
+        if drop >= ENTROPY_DROP_THRESHOLD {
+            println!(
+                "Decrypted as {file_type:?} (entropy drop {drop:.3}), IV: {:02x?}",
+                iv
+            );
+            std::fs::write(output, &attempt)
+                .map_err(|e| format!("Failed to write decrypted file: {e}"))?;
+            println!("Decrypted → {}", output.display());
+            return Ok(());
+        }
+        // Not enough drop — wrong candidate, try the next one.
+    }
+
+    Err(format!(
+        "Could not decrypt '{}': none of the known-plaintext candidates produced recognizable output.\n\
+         Try specifying --type explicitly.",
+        input.display()
+    ))
+}
+
+/// Auto mode: detect whether the file is encrypted or decrypted, then do the reverse.
+pub fn auto_crypt(input: &PathBuf, hint: Option<KnownFileType>) -> Result<(), String> {
+    let data = std::fs::read(input).map_err(|e| format!("Failed to read file: {e}"))?;
+
+    match status_heuristic(&data) {
+        Heuristic::Decrypted(reason) => {
+            println!("File appears decrypted ({reason:?}) — encrypting…");
+            // Place output next to input with a `.enc` extension.
+            let output = input.with_extension(
+                format!(
+                    "{}.enc",
+                    input.extension().and_then(|e| e.to_str()).unwrap_or("")
+                )
+                .trim_start_matches('.'),
+            );
+            encrypt_file(input, &output)
+        }
+        Heuristic::Encrypted(reason) => {
+            println!("File appears encrypted ({reason:?}) — decrypting…");
+            // Place output next to input with a `.dec` extension.
+            let output = input.with_extension(
+                format!(
+                    "{}.dec",
+                    input.extension().and_then(|e| e.to_str()).unwrap_or("")
+                )
+                .trim_start_matches('.'),
+            );
+            decrypt_file(input, &output, hint)
         }
     }
 }
