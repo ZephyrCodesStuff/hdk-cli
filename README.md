@@ -114,8 +114,6 @@ hdk map --input <dir> [--output <dir>] [--full] [--uuid <uuid>]
 
 ## 💿 Building
 
-`hdk-cli` requires a **nightly** Rust toolchain (for [`path_add_extension`](https://doc.rust-lang.org/std/path/struct.PathBuf.html#method.with_added_extension)).
-
 ```sh
 # Clone the repository
 git clone https://github.com/ZephyrCodesStuff/hdk-cli
