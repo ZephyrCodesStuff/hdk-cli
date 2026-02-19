@@ -49,7 +49,7 @@ impl Sharc {
         if time_path.exists() {
             let time_bytes = common::read_file_bytes(&time_path)?;
             if time_bytes.len() == 4 {
-                let timestamp = i32::from_le_bytes(time_bytes.try_into().unwrap());
+                let timestamp = i32::from_be_bytes(time_bytes.try_into().unwrap());
                 archive_writer = archive_writer.with_timestamp(timestamp);
                 println!("Using timestamp from .time file: {}", timestamp);
             } else {
@@ -119,7 +119,8 @@ impl Sharc {
         let time = archive_reader.header().timestamp;
         let time_path = output.join(".time");
 
-        std::fs::write(&time_path, time.to_le_bytes())
+        // Always write the timestamp in big-endian for consistency
+        std::fs::write(&time_path, time.to_be_bytes())
             .map_err(|e| format!("failed to write .time file: {e}"))?;
 
         println!("Extracted {extracted} files to {}", output.display());
