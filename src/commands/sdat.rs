@@ -96,12 +96,14 @@ impl Sdat {
             //
             // - If the relative path is an 8-character hex string, treat it as an unmapped hash and parse it directly.
             // - Otherwise, normalize the path (lowercase + forward slashes) and hash it as a mapped entry.
-            let raw_path_str = rel_path.to_string_lossy();
+            let raw_path_str = rel_path.to_string_lossy().to_string();
             let name_hash =
                 if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
                     // UNMAPPED: Parse the 8-character hex string directly back into an i32
-                    let hash_val = u32::from_str_radix(&raw_path_str, 16).unwrap();
-                    AfsHash(hash_val as i32)
+                    let hash_val = hex::decode(&raw_path_str)
+                        .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
+
+                    AfsHash(i32::from_be_bytes(hash_val.try_into().unwrap()))
                 } else {
                     // MAPPED: Normalize the real path (lowercase + forward slashes) and hash it
                     let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
