@@ -42,6 +42,10 @@ The binary is invoked as `hdk`. All sub-commands support `--help` for usage deta
 | `sdat create`  |  `c`  | Pack a directory into a Sony SDATA archive |
 | `sdat extract` |  `x`  | Unpack an SDATA archive to a directory     |
 
+> ⚠️ **Warning**: This tool writes *all* archive timestamps as **big-endian**, for one simple reason: they are easier to patch when working in a hex-editor manually.
+>
+> Should you use the `.time` files it produces for anything else, make sure to parse them as **big-endian**!
+
 ### `sharc` — SHARC archives
 
 | Sub-command     | Alias | Description                                            |
