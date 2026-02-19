@@ -89,7 +89,7 @@ impl Sdat {
         let mut files = common::collect_input_files(input)?;
 
         // Sort by signed AfsHash value (ascending)
-        files.sort_by(|a, b| a.2 .0.cmp(&b.2 .0));
+        files.sort_by_key(|a| a.2 .0);
 
         for (abs_path, rel_path, name_hash) in files {
             let data = common::read_file_bytes(&abs_path)?;

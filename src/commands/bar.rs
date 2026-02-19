@@ -58,7 +58,7 @@ impl Bar {
 
         // Sort ascending by signed AfsHash value
         // This ensures they're written in the same order as the input files
-        files.sort_by(|(_, _, a_hash), (_, _, b_hash)| a_hash.0.cmp(&b_hash.0));
+        files.sort_by_key(|(_, _, a_hash)| a_hash.0);
 
         for (abs_path, rel_path, name_hash) in files {
             let data = common::read_file_bytes(&abs_path)?;
