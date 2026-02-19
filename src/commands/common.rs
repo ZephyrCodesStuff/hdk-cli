@@ -4,6 +4,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use hdk_archive::archive::ArchiveReader;
+use hdk_secure::hash::AfsHash;
 
 /// Confirm overwriting an existing file.
 /// Returns `Ok(File)` if the user confirms or file doesn't exist.
@@ -58,14 +59,30 @@ pub fn create_output_dir(path: &Path) -> Result<(), String> {
 
 /// Collects all files in a directory (recursively) or returns a single file.
 ///
-/// TODO: calculate hashes here so that we can use them readily when making the archive
-pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+/// Calculates and returns the `AfsHash` for each file so callers get a well-formed
+/// (absolute path, relative path, name-hash) tuple.
+pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf, AfsHash)>, String> {
     if input.is_file() {
         let file_name = input
             .file_name()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("file"));
-        return Ok(vec![(input.to_path_buf(), file_name)]);
+
+        let raw_path_str = file_name.to_string_lossy().to_string();
+        let name_hash = if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
+            let hash_val = hex::decode(&raw_path_str)
+                .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
+            let bytes: [u8; 4] = hash_val
+                .as_slice()
+                .try_into()
+                .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
+            AfsHash(i32::from_be_bytes(bytes))
+        } else {
+            let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
+            AfsHash::new_from_str(&clean_path)
+        };
+
+        return Ok(vec![(input.to_path_buf(), file_name, name_hash)]);
     }
 
     if !input.is_dir() {
@@ -94,10 +111,23 @@ pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf)>, Stri
             .map_err(|e| format!("failed to get relative path: {e}"))?
             .to_path_buf();
 
-        files.push((abs_path, rel_path));
+        let raw_path_str = rel_path.to_string_lossy().to_string();
+        let name_hash = if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
+            let hash_val = hex::decode(&raw_path_str)
+                .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
+            let bytes: [u8; 4] = hash_val
+                .as_slice()
+                .try_into()
+                .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
+            hdk_secure::hash::AfsHash(i32::from_be_bytes(bytes))
+        } else {
+            let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
+            hdk_secure::hash::AfsHash::new_from_str(&clean_path)
+        };
+
+        files.push((abs_path, rel_path, name_hash));
     }
 
-    files.sort_by(|a, b| a.1.cmp(&b.1));
     Ok(files)
 }
 

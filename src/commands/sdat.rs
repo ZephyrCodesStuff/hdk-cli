@@ -1,6 +1,5 @@
 use clap::Subcommand;
 use hdk_archive::structs::{ArchiveFlags, Endianness};
-use hdk_secure::hash::AfsHash;
 use std::path::Path;
 
 use crate::commands::{Execute, IOArgs, common};
@@ -70,8 +69,6 @@ impl Sdat {
             .with_endianess(endianess)
             .with_flags(ArchiveFlags::Protected.into());
 
-        let files = common::collect_input_files(input)?;
-
         // Check if the input directory has a `.time` file for timestamp.
         // If so, parse as i32 and use it as the archive timestamp.
         let time_path = input.join(".time");
@@ -89,26 +86,13 @@ impl Sdat {
             }
         }
 
-        for (abs_path, rel_path) in files {
+        let mut files = common::collect_input_files(input)?;
+
+        // Sort by signed AfsHash value (ascending)
+        files.sort_by(|a, b| a.2 .0.cmp(&b.2 .0));
+
+        for (abs_path, rel_path, name_hash) in files {
             let data = common::read_file_bytes(&abs_path)?;
-
-            // Determine the name hash:
-            //
-            // - If the relative path is an 8-character hex string, treat it as an unmapped hash and parse it directly.
-            // - Otherwise, normalize the path (lowercase + forward slashes) and hash it as a mapped entry.
-            let raw_path_str = rel_path.to_string_lossy().to_string();
-            let name_hash =
-                if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
-                    // UNMAPPED: Parse the 8-character hex string directly back into an i32
-                    let hash_val = hex::decode(&raw_path_str)
-                        .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
-
-                    AfsHash(i32::from_be_bytes(hash_val.try_into().unwrap()))
-                } else {
-                    // MAPPED: Normalize the real path (lowercase + forward slashes) and hash it
-                    let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
-                    AfsHash::new_from_str(&clean_path)
-                };
 
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
