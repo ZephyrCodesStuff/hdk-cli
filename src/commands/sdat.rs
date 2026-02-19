@@ -137,7 +137,7 @@ impl Sdat {
             .map_err(|e| format!("failed to create SDAT writer: {e}"))?;
 
         let sdat_bytes = sdat
-            .write_from_reader_to_vec(archive_bytes)
+            .write_to_vec(archive_bytes.get_ref())
             .map_err(|e| format!("failed to write SDAT: {e}"))?;
 
         // Write SDAT to output file

@@ -89,12 +89,12 @@ impl Sharc {
                 .map_err(|e| format!("failed to add entry: {e}"))?;
         }
 
-        let mut archive_bytes = archive_writer
+        let archive_bytes = archive_writer
             .finish()
             .map_err(|e| format!("failed to finalize SHARC: {e}"))?;
 
         let output_file = common::create_output_file(output)?;
-        std::io::copy(&mut archive_bytes, &mut &output_file)
+        std::io::copy(&mut archive_bytes.get_ref().as_slice(), &mut &output_file)
             .map_err(|e| format!("failed to write archive: {e}"))?;
 
         println!("Created SHARC archive: {}", output.display());
