@@ -76,11 +76,16 @@ jobs:
           echo "msg<<$EOF" >> $GITHUB_OUTPUT
           git log -1 --pretty=%B >> $GITHUB_OUTPUT
           echo "$EOF" >> $GITHUB_OUTPUT
+          # expose short SHA for use in the release name/tag
+          echo "short_sha=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "🔖 Release ${{ github.ref_name }}"
+          # create a release/tag that points at the pushed commit (no pre-existing tag required)
+          tag_name: release-${{ steps.commit_msg.outputs.short_sha }}
+          target_commitish: ${{ github.sha }}
+          name: "🔖 Release #${{ steps.commit_msg.outputs.short_sha }}"
           body: ${{ steps.commit_msg.outputs.msg }}
           files: |
             artifacts/hdk-win-x86.exe
