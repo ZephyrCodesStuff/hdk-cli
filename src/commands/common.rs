@@ -69,18 +69,19 @@ pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf, AfsHas
             .unwrap_or_else(|| PathBuf::from("file"));
 
         let raw_path_str = file_name.to_string_lossy().to_string();
-        let name_hash = if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
-            let hash_val = hex::decode(&raw_path_str)
-                .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
-            let bytes: [u8; 4] = hash_val
-                .as_slice()
-                .try_into()
-                .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
-            AfsHash(i32::from_be_bytes(bytes))
-        } else {
-            let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
-            AfsHash::new_from_str(&clean_path)
-        };
+        let name_hash =
+            if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                let hash_val = hex::decode(&raw_path_str)
+                    .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
+                let bytes: [u8; 4] = hash_val
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
+                AfsHash(i32::from_be_bytes(bytes))
+            } else {
+                let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
+                AfsHash::new_from_str(&clean_path)
+            };
 
         return Ok(vec![(input.to_path_buf(), file_name, name_hash)]);
     }
@@ -112,18 +113,19 @@ pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf, AfsHas
             .to_path_buf();
 
         let raw_path_str = rel_path.to_string_lossy().to_string();
-        let name_hash = if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
-            let hash_val = hex::decode(&raw_path_str)
-                .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
-            let bytes: [u8; 4] = hash_val
-                .as_slice()
-                .try_into()
-                .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
-            hdk_secure::hash::AfsHash(i32::from_be_bytes(bytes))
-        } else {
-            let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
-            hdk_secure::hash::AfsHash::new_from_str(&clean_path)
-        };
+        let name_hash =
+            if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                let hash_val = hex::decode(&raw_path_str)
+                    .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
+                let bytes: [u8; 4] = hash_val
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
+                hdk_secure::hash::AfsHash(i32::from_be_bytes(bytes))
+            } else {
+                let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
+                hdk_secure::hash::AfsHash::new_from_str(&clean_path)
+            };
 
         files.push((abs_path, rel_path, name_hash));
     }

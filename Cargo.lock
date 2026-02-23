@@ -16,7 +16,7 @@ checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
  "cipher",
- "cpufeatures",
+ "cpufeatures 0.2.17",
 ]
 
 [[package]]
@@ -210,6 +210,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+name = "chacha20"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f8d983286843e49675a4b7a2d174efe136dc93a18d69130dd18198a6c167601"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "rand_core 0.10.0",
+]
+
+[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -289,6 +300,15 @@ name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "cpufeatures"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
 dependencies = [
  "libc",
 ]
@@ -655,6 +675,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi",
+ "rand_core 0.10.0",
  "wasip2",
  "wasip3",
 ]
@@ -688,7 +709,7 @@ checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 [[package]]
 name = "hdk-archive"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#db951a9fd7bdcee34364bddc7963c615eb9777a4"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=feat%2Fbinrw#dc15b2c8141e9b1068134d5d8f95ddb83b346c34"
 dependencies = [
  "aes",
  "binrw",
@@ -700,7 +721,7 @@ dependencies = [
  "hdk-comp",
  "hdk-secure",
  "num_enum",
- "rand",
+ "rand 0.9.2",
  "sha1_smol",
  "walkdir",
 ]
@@ -709,6 +730,7 @@ dependencies = [
 name = "hdk-cli"
 version = "0.1.0"
 dependencies = [
+ "binrw",
  "clap",
  "ctr",
  "dialoguer",
@@ -721,6 +743,7 @@ dependencies = [
  "hdk-secure",
  "hex",
  "infer",
+ "rand 0.10.0",
  "sha1_smol",
  "walkdir",
 ]
@@ -728,7 +751,7 @@ dependencies = [
 [[package]]
 name = "hdk-comp"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#db951a9fd7bdcee34364bddc7963c615eb9777a4"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=feat%2Fbinrw#dc15b2c8141e9b1068134d5d8f95ddb83b346c34"
 dependencies = [
  "byteorder",
  "flate2",
@@ -738,7 +761,7 @@ dependencies = [
 [[package]]
 name = "hdk-firmware"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#db951a9fd7bdcee34364bddc7963c615eb9777a4"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=feat%2Fbinrw#dc15b2c8141e9b1068134d5d8f95ddb83b346c34"
 dependencies = [
  "aes",
  "byteorder",
@@ -755,7 +778,7 @@ dependencies = [
 [[package]]
 name = "hdk-sdat"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#db951a9fd7bdcee34364bddc7963c615eb9777a4"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=feat%2Fbinrw#dc15b2c8141e9b1068134d5d8f95ddb83b346c34"
 dependencies = [
  "aes",
  "binrw",
@@ -768,8 +791,9 @@ dependencies = [
 [[package]]
 name = "hdk-secure"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#db951a9fd7bdcee34364bddc7963c615eb9777a4"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=feat%2Fbinrw#dc15b2c8141e9b1068134d5d8f95ddb83b346c34"
 dependencies = [
+ "binrw",
  "byteorder",
  "cbc",
  "cipher",
@@ -777,7 +801,7 @@ dependencies = [
  "ctr",
  "ecb",
  "hex",
- "rand",
+ "rand 0.9.2",
  "uuid",
 ]
 
@@ -1060,6 +1084,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc266eb313df6c5c09c1c7b1fbe2510961e5bcd3add930c1e31f7ed9da0feff8"
+dependencies = [
+ "chacha20",
+ "getrandom 0.4.1",
+ "rand_core 0.10.0",
+]
+
+[[package]]
 name = "rand_chacha"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1086,6 +1121,12 @@ checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
 ]
+
+[[package]]
+name = "rand_core"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c8d0fd677905edcbeedbf2edb6494d676f0e98d54d5cf9bda0b061cb8fb8aba"
 
 [[package]]
 name = "regex-automata"
@@ -1217,7 +1258,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest",
 ]
 

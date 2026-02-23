@@ -3,7 +3,7 @@ use crate::commands::{
 };
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use enum_dispatch::enum_dispatch;
 
 pub mod bar;
@@ -91,4 +91,27 @@ pub struct IArg {
     /// Input file / folder path
     #[clap(short, long)]
     pub input: PathBuf,
+}
+
+/// Utility wrapping of Endianness for clap argument parsing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum EndianArg {
+    Little,
+    Big,
+}
+
+impl From<EndianArg> for hdk_archive::structs::Endianness {
+    fn from(value: EndianArg) -> Self {
+        match value {
+            EndianArg::Little => hdk_archive::structs::Endianness::Little,
+            EndianArg::Big => hdk_archive::structs::Endianness::Big,
+        }
+    }
+}
+
+/// Archive type parser
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ArchiveType {
+    Sharc,
+    Bar,
 }

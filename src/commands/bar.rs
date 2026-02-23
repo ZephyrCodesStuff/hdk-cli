@@ -5,7 +5,7 @@ use crate::{
     keys::{BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY},
 };
 use clap::Subcommand;
-use hdk_archive::structs::ArchiveFlags;
+use hdk_archive::structs::ArchiveFlagsValue;
 
 #[derive(Subcommand, Debug)]
 pub enum Bar {
@@ -35,7 +35,7 @@ impl Bar {
         let mut archive_writer = hdk_archive::bar::writer::BarWriter::default()
             .with_default_key(BAR_DEFAULT_KEY)
             .with_signature_key(BAR_SIGNATURE_KEY)
-            .with_flags(ArchiveFlags::Protected.into());
+            .with_flags(ArchiveFlagsValue::Protected.into());
 
         // Check if the input directory has a `.time` file for timestamp.
         // If so, parse as i32 and use it as the archive timestamp.

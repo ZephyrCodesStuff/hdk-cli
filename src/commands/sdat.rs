@@ -1,17 +1,46 @@
+use binrw::{BinRead, Endian};
 use clap::Subcommand;
-use hdk_archive::structs::{ArchiveFlags, Endianness};
-use std::path::Path;
+use hdk_archive::{
+    archive::ArchiveReader,
+    sharc::{builder::SharcBuilder, structs::SharcArchive},
+    structs::Endianness,
+};
+use rand::RngExt;
+use std::path::{Path, PathBuf};
 
-use crate::commands::{Execute, IOArgs, common};
+use crate::{
+    commands::{ArchiveType, EndianArg, Execute, IArg, IOArgs, common},
+    keys::{SHARC_FILES_KEY, SHARC_SDAT_KEY},
+    magic,
+};
 
 #[derive(Subcommand, Debug)]
 pub enum Sdat {
     /// Create an SDAT archive
     #[clap(alias = "c")]
-    Create(IOArgs),
+    Create {
+        /// Input directory to create SDAT from
+        #[clap(short, long)]
+        input: PathBuf,
+
+        /// Output SDAT file path
+        #[clap(short, long)]
+        output: PathBuf,
+
+        /// Archive type (SHARC or BAR) to wrap in SDAT (default: SHARC)
+        #[clap(short, long, default_value = "sharc")]
+        archive_type: ArchiveType,
+
+        /// Endianness for the inner SHARC/BAR archive (default: big-endian)
+        #[clap(short, long, default_value = "big")]
+        endian: EndianArg,
+    },
     /// Extract an SDAT archive
     #[clap(alias = "x")]
     Extract(IOArgs),
+    /// Inspect an SDAT archive and print its contents
+    #[clap(alias = "i")]
+    Inspect(IArg),
 }
 
 const SDAT_KEYS: hdk_sdat::SdatKeys = hdk_sdat::SdatKeys {
@@ -48,8 +77,14 @@ const SDAT_KEYS: hdk_sdat::SdatKeys = hdk_sdat::SdatKeys {
 impl Execute for Sdat {
     fn execute(self) {
         let function = match self {
-            Self::Create(args) => Self::create(&args.input, &args.output),
+            Self::Create {
+                input,
+                output,
+                archive_type,
+                endian,
+            } => Self::create(&input, &output, archive_type, endian),
             Self::Extract(args) => Self::extract(&args.input, &args.output),
+            Self::Inspect(args) => Self::inspect(&args.input),
         };
 
         if let Err(e) = function {
@@ -59,15 +94,14 @@ impl Execute for Sdat {
 }
 
 impl Sdat {
-    pub fn create(input: &Path, output: &Path) -> Result<(), String> {
-        // TODO: let user pick if SHARC or BAR
-        // TODO: let user pick endianness
-        let endianess = Endianness::Big;
-
-        let mut archive_writer = hdk_archive::sharc::writer::SharcWriter::default()
-            .with_key(crate::keys::SHARC_SDAT_KEY)
-            .with_endianess(endianess)
-            .with_flags(ArchiveFlags::Protected.into());
+    pub fn create(
+        input: &Path,
+        output: &Path,
+        _archive_type: ArchiveType,
+        endian: EndianArg,
+    ) -> Result<(), String> {
+        let endianess = Endianness::from(endian);
+        let mut archive_writer = SharcBuilder::new(SHARC_SDAT_KEY, SHARC_FILES_KEY);
 
         // Check if the input directory has a `.time` file for timestamp.
         // If so, parse as i32 and use it as the archive timestamp.
@@ -89,26 +123,32 @@ impl Sdat {
         let mut files = common::collect_input_files(input)?;
 
         // Sort by signed AfsHash value (ascending)
-        files.sort_by_key(|a| a.2 .0);
+        files.sort_by_key(|a| a.2.0);
 
         for (abs_path, rel_path, name_hash) in files {
             let data = common::read_file_bytes(&abs_path)?;
 
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
-            archive_writer
-                .add_entry_from_bytes(
-                    name_hash,
-                    // TODO: let user pick how to compress/encrypt files
-                    hdk_archive::structs::CompressionType::Encrypted,
-                    &data,
-                )
-                .map_err(|e| format!("failed to add entry to SDAT: {e}"))?;
+            let mut iv = [0u8; 8];
+            let mut rng = rand::rng();
+            rng.fill(&mut iv);
+
+            archive_writer.add_entry(
+                name_hash,
+                data,
+                // TODO: let user pick how to compress/encrypt files
+                hdk_archive::structs::CompressionType::Encrypted,
+                iv,
+            );
         }
 
         // Finalize SHARC archive
-        let archive_bytes = archive_writer
-            .finish()
+        let mut buf = Vec::new();
+        let mut writer = std::io::Cursor::new(&mut buf);
+
+        archive_writer
+            .build(&mut writer, endianess.into())
             .map_err(|e| format!("failed to finalize SHARC: {e}"))?;
 
         // Wrap SHARC in SDAT
@@ -118,16 +158,15 @@ impl Sdat {
             .ok_or("invalid output file name")?
             .to_string();
 
-        let output_file = common::create_output_file(output)?;
-
         let sdat = hdk_sdat::SdatWriter::new(output_file_name, SDAT_KEYS)
             .map_err(|e| format!("failed to create SDAT writer: {e}"))?;
 
         let sdat_bytes = sdat
-            .write_to_vec(archive_bytes.get_ref())
+            .write_to_vec(&buf)
             .map_err(|e| format!("failed to write SDAT: {e}"))?;
 
         // Write SDAT to output file
+        let output_file = common::create_output_file(output)?;
         std::io::copy(&mut &sdat_bytes[..], &mut &output_file)
             .map_err(|e| format!("failed to write SDAT to file: {e}"))?;
 
@@ -149,28 +188,53 @@ impl Sdat {
             .map_err(|e| format!("failed to decrypt SDAT: {e}"))?;
 
         // Try SHARC first, then BAR. If neither work, return error.
-        // Each attempt gets its own cursor because opening may consume/inspect it.
-        // Try SHARC
-        if let Ok(mut archive_reader) = hdk_archive::sharc::reader::SharcReader::open(
-            std::io::Cursor::new(archive_bytes.clone()),
-            crate::keys::SHARC_SDAT_KEY,
-        ) {
+        let magic: &[u8; 4] = &archive_bytes[0..4].try_into().unwrap();
+        let endian: Endian = magic::magic_to_endianess(magic).into();
+        let mut reader = std::io::Cursor::new(archive_bytes.clone());
+
+        if let Ok(sharc) = match endian {
+            Endian::Little => SharcArchive::read_le_args(
+                &mut reader,
+                (SHARC_SDAT_KEY, archive_bytes.len() as u32),
+            ),
+            Endian::Big => SharcArchive::read_be_args(
+                &mut reader,
+                (SHARC_SDAT_KEY, archive_bytes.len() as u32),
+            ),
+        } {
             common::create_output_dir(output)?;
 
-            let extracted = common::extract_archive_entries(&mut archive_reader, output, |m| {
-                m.name_hash.to_string().into()
-            })?;
+            for entry in &sharc.entries {
+                let data = sharc
+                    .entry_data(&mut reader, entry)
+                    .map_err(|e| format!("failed to read SHARC entry data: {e}"))?;
 
-            // Save the `.time` with the archive's endianess in the output folder root
-            let time = archive_reader.header().timestamp;
+                let rel_path = entry.name_hash.to_string();
+                let output_path = output.join(rel_path);
+
+                let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
+                    format!(
+                        "failed to create output file {}: {e}",
+                        output_path.display()
+                    )
+                })?;
+
+                std::io::copy(&mut &data[..], &mut output_file).map_err(|e| {
+                    format!("failed to write output file {}: {e}", output_path.display())
+                })?;
+            }
+
+            let time = sharc.archive_data.timestamp;
             let time_path = output.join(".time");
 
-            // Always write the timestamp in big-endian for consistency:
-            // since in the future we won't know what endianness the archive had, it's safer to always write as LE
             std::fs::write(&time_path, time.to_be_bytes())
                 .map_err(|e| format!("failed to write .time file: {e}"))?;
 
-            println!("Extracted {extracted} files to {}", output.display());
+            println!(
+                "Extracted {} files to {}",
+                sharc.entries.len(),
+                output.display()
+            );
             return Ok(());
         }
 
@@ -195,6 +259,92 @@ impl Sdat {
                 .map_err(|e| format!("failed to write .time file: {e}"))?;
 
             println!("Extracted {extracted} files to {}", output.display());
+            return Ok(());
+        }
+
+        Err("file does not contain a supported SHARC or BAR archive".to_string())
+    }
+
+    pub fn inspect(input: &Path) -> Result<(), String> {
+        // Open and read the SDAT file
+        let file =
+            std::fs::File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
+
+        // Parse the SDAT file to extract the SHARC/BAR archive
+        let mut sdat = hdk_sdat::SdatReader::open(file, &SDAT_KEYS)
+            .map_err(|e| format!("failed to open SDAT: {e}"))?;
+
+        let archive_bytes = sdat
+            .decrypt_to_vec()
+            .map_err(|e| format!("failed to decrypt SDAT: {e}"))?;
+
+        // Try SHARC first
+        let magic: &[u8; 4] = &archive_bytes[0..4].try_into().unwrap();
+        let endian: Endian = magic::magic_to_endianess(magic).into();
+        let mut reader = std::io::Cursor::new(archive_bytes.clone());
+
+        if let Ok(sharc) = match endian {
+            Endian::Little => SharcArchive::read_le_args(
+                &mut reader,
+                (SHARC_SDAT_KEY, archive_bytes.len() as u32),
+            ),
+            Endian::Big => SharcArchive::read_be_args(
+                &mut reader,
+                (SHARC_SDAT_KEY, archive_bytes.len() as u32),
+            ),
+        } {
+            let header = sharc.archive_data;
+            println!("Archive Type: SHARC");
+            println!("Timestamp: {}", header.timestamp);
+            println!("Entry Count: {}", sharc.entries.len());
+            println!("\nEntries:");
+            for entry in &sharc.entries {
+                println!(
+                    "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}",
+                    entry.name_hash,
+                    entry.location.0,
+                    entry.uncompressed_size,
+                    entry.compressed_size
+                );
+            }
+            return Ok(());
+        }
+
+        // Try BAR
+        if let Ok(archive_reader) = hdk_archive::bar::reader::BarReader::open(
+            std::io::Cursor::new(archive_bytes.clone()),
+            crate::keys::BAR_DEFAULT_KEY,
+            crate::keys::BAR_SIGNATURE_KEY,
+            None,
+        ) {
+            let header = archive_reader.header();
+            println!("Archive Type: BAR");
+            println!("Timestamp: {}", header.timestamp);
+            println!("Entry Count: {}", archive_reader.entry_count());
+            println!("\nEntries:");
+
+            let mut archive_reader = hdk_archive::bar::reader::BarReader::open(
+                std::io::Cursor::new(archive_bytes),
+                crate::keys::BAR_DEFAULT_KEY,
+                crate::keys::BAR_SIGNATURE_KEY,
+                None,
+            )
+            .map_err(|e| format!("failed to open BAR reader: {e}"))?;
+
+            archive_reader
+                .for_each_entry(|entry| {
+                    let name_hash = entry.metadata.name_hash;
+                    println!(
+                        "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}",
+                        name_hash,
+                        entry.metadata.offset,
+                        entry.metadata.uncompressed_size,
+                        entry.metadata.compressed_size
+                    );
+                    Ok(())
+                })
+                .map_err(|e| format!("failed to iterate entries: {e}"))?;
+
             return Ok(());
         }
 
