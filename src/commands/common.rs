@@ -3,7 +3,6 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use hdk_archive::archive::ArchiveReader;
 use hdk_secure::hash::AfsHash;
 
 /// Confirm overwriting an existing file.
@@ -69,18 +68,19 @@ pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf, AfsHas
             .unwrap_or_else(|| PathBuf::from("file"));
 
         let raw_path_str = file_name.to_string_lossy().to_string();
-        let name_hash = if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
-            let hash_val = hex::decode(&raw_path_str)
-                .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
-            let bytes: [u8; 4] = hash_val
-                .as_slice()
-                .try_into()
-                .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
-            AfsHash(i32::from_be_bytes(bytes))
-        } else {
-            let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
-            AfsHash::new_from_str(&clean_path)
-        };
+        let name_hash =
+            if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                let hash_val = hex::decode(&raw_path_str)
+                    .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
+                let bytes: [u8; 4] = hash_val
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
+                AfsHash(i32::from_be_bytes(bytes))
+            } else {
+                let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
+                AfsHash::new_from_str(&clean_path)
+            };
 
         return Ok(vec![(input.to_path_buf(), file_name, name_hash)]);
     }
@@ -112,18 +112,19 @@ pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf, AfsHas
             .to_path_buf();
 
         let raw_path_str = rel_path.to_string_lossy().to_string();
-        let name_hash = if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
-            let hash_val = hex::decode(&raw_path_str)
-                .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
-            let bytes: [u8; 4] = hash_val
-                .as_slice()
-                .try_into()
-                .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
-            hdk_secure::hash::AfsHash(i32::from_be_bytes(bytes))
-        } else {
-            let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
-            hdk_secure::hash::AfsHash::new_from_str(&clean_path)
-        };
+        let name_hash =
+            if raw_path_str.len() == 8 && raw_path_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                let hash_val = hex::decode(&raw_path_str)
+                    .map_err(|e| format!("invalid hex in filename '{}': {e}", raw_path_str))?;
+                let bytes: [u8; 4] = hash_val
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| format!("invalid hash bytes length for '{}'", raw_path_str))?;
+                hdk_secure::hash::AfsHash(i32::from_be_bytes(bytes))
+            } else {
+                let clean_path = raw_path_str.to_lowercase().replace("\\", "/");
+                hdk_secure::hash::AfsHash::new_from_str(&clean_path)
+            };
 
         files.push((abs_path, rel_path, name_hash));
     }
@@ -139,52 +140,4 @@ pub fn read_file_bytes(path: &Path) -> Result<Vec<u8>, String> {
         .read_to_end(&mut data)
         .map_err(|e| format!("failed to read file {}: {e}", path.display()))?;
     Ok(data)
-}
-
-/// Extract all entries from an `ArchiveReader` into `output_dir`.
-///
-/// Callers provide a mapping from entry metadata to a relative output path.
-///
-/// # Arguments
-///
-/// - `archive`: ArchiveReader implementation to extract from
-/// - `output_dir`: Output directory to extract files into
-/// - `output_rel_path`: Function mapping entry metadata to relative output path
-///
-/// # Returns
-///
-/// The number of extracted entries, or an error string.
-pub fn extract_archive_entries<A, F>(
-    archive: &mut A,
-    output_dir: &Path,
-    mut output_rel_path: F,
-) -> Result<usize, String>
-where
-    A: ArchiveReader,
-    F: FnMut(&A::Metadata) -> PathBuf,
-{
-    archive
-        .for_each_entry(|mut entry| -> std::io::Result<()> {
-            let rel_path = output_rel_path(&entry.metadata);
-            let output_path = output_dir.join(rel_path);
-
-            let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
-                std::io::Error::other(format!(
-                    "failed to create output file {}: {e}",
-                    output_path.display()
-                ))
-            })?;
-
-            std::io::copy(&mut entry.reader, &mut output_file).map_err(|e| {
-                std::io::Error::other(format!(
-                    "failed to write entry to {}: {e}",
-                    output_path.display()
-                ))
-            })?;
-
-            Ok(())
-        })
-        .map_err(|e| format!("failed to extract entries: {e}"))?;
-
-    Ok(archive.entry_count())
 }

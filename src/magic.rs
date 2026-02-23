@@ -4,6 +4,15 @@
 
 use hdk_archive::structs::{ArchiveVersion, Endianness};
 
+/// Convenience function to convert a magic value to an Endianness enum.
+pub const fn magic_to_endianess(buf: &[u8; 4]) -> Endianness {
+    match buf {
+        b"\xE1\x17\xEF\xAD" => Endianness::Little,
+        b"\xAD\xEF\x17\xE1" => Endianness::Big,
+        _ => panic!("Invalid magic value"),
+    }
+}
+
 /// Archive matcher based on the magic value in the header.
 ///
 /// Archives can be either big-endian or little-endian, so we check for both.

@@ -3,9 +3,14 @@ use std::path::Path;
 use crate::{
     commands::{Execute, IOArgs, common},
     keys::{BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY},
+    magic,
 };
+use binrw::{BinRead, Endian};
 use clap::Subcommand;
-use hdk_archive::structs::ArchiveFlags;
+use hdk_archive::{
+    bar::{builder::BarBuilder, structs::BarArchive},
+    structs::{ArchiveFlags, ArchiveFlagsValue},
+};
 
 #[derive(Subcommand, Debug)]
 pub enum Bar {
@@ -32,10 +37,12 @@ impl Execute for Bar {
 
 impl Bar {
     pub fn create(input: &Path, output: &Path) -> Result<(), String> {
-        let mut archive_writer = hdk_archive::bar::writer::BarWriter::default()
-            .with_default_key(BAR_DEFAULT_KEY)
-            .with_signature_key(BAR_SIGNATURE_KEY)
-            .with_flags(ArchiveFlags::Protected.into());
+        // let mut archive_writer = hdk_archive::bar::writer::BarWriter::default()
+        //     .with_default_key(BAR_DEFAULT_KEY)
+        //     .with_signature_key(BAR_SIGNATURE_KEY)
+        //     .with_flags(ArchiveFlagsValue::Protected.into());
+        let mut archive_writer = BarBuilder::new(BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY)
+            .with_flags(ArchiveFlags(ArchiveFlagsValue::Protected.into()));
 
         // Check if the input directory has a `.time` file for timestamp.
         // If so, parse as i32 and use it as the archive timestamp.
@@ -65,21 +72,23 @@ impl Bar {
 
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
-            archive_writer
-                .add_entry(
-                    name_hash,
-                    hdk_archive::structs::CompressionType::Encrypted,
-                    &data,
-                )
-                .map_err(|e| format!("failed to add entry: {e}"))?;
+            archive_writer.add_entry(
+                name_hash,
+                data,
+                hdk_archive::structs::CompressionType::Encrypted,
+            );
         }
 
-        let archive_bytes = archive_writer
-            .finish()
-            .map_err(|e| format!("failed to finalize BAR: {e}"))?;
+        let mut buf = Vec::new();
+        let endian = Endian::Little; // TODO: let user pick endianness
+        let mut writer = std::io::Cursor::new(&mut buf);
+
+        archive_writer
+            .build(&mut writer, endian)
+            .map_err(|e| format!("failed to finalize archive: {e}"))?;
 
         let output_file = common::create_output_file(output)?;
-        std::io::copy(&mut archive_bytes.get_ref().as_slice(), &mut &output_file)
+        std::io::copy(&mut buf.as_slice(), &mut &output_file)
             .map_err(|e| format!("failed to write archive: {e}"))?;
 
         println!("Created BAR archive: {}", output.display());
@@ -87,37 +96,53 @@ impl Bar {
     }
 
     pub fn extract(input: &Path, output: &Path) -> Result<(), String> {
-        let file =
-            std::fs::File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
-
-        let mut archive_reader = hdk_archive::bar::reader::BarReader::open(
-            file,
-            BAR_DEFAULT_KEY,
-            BAR_SIGNATURE_KEY,
-            None,
-        )
-        .map_err(|e| format!("failed to open BAR archive: {e}"))?;
+        let data = common::read_file_bytes(input)?;
+        let magic: [u8; 4] = data
+            .get(0..4)
+            .ok_or_else(|| "File too small to be a valid archive".to_string())?
+            .try_into()
+            .unwrap();
+        let endian: Endian = magic::magic_to_endianess(&magic).into();
 
         common::create_output_dir(output)?;
+        let mut reader = std::io::Cursor::new(&data);
 
-        let extracted = common::extract_archive_entries(&mut archive_reader, output, |m| {
-            // BAR doesn't preserve original names; extract by hash.
-            m.name_hash.to_string().into()
-        })?;
+        let archive = match endian {
+            Endian::Little => BarArchive::read_le_args(
+                &mut reader,
+                (BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY, data.len() as u32),
+            ),
+            Endian::Big => BarArchive::read_be_args(
+                &mut reader,
+                (BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY, data.len() as u32),
+            ),
+        }
+        .map_err(|e| format!("failed to open BAR archive: {e}"))?;
 
-        if extracted > 0 {
-            println!("Extracted {extracted} entries");
+        for entry in &archive.entries {
+            let file_data = archive
+                .entry_data(&mut reader, entry, &BAR_DEFAULT_KEY, &BAR_SIGNATURE_KEY)
+                .map_err(|e| format!("failed to read entry data: {e}"))?;
+
+            let output_path = output.join(format!("{}.bin", entry.name_hash));
+
+            std::fs::write(&output_path, file_data)
+                .map_err(|e| format!("failed to write file {}: {e}", output_path.display()))?;
         }
 
         // Save the `.time` with the archive's endianess in the output folder root
-        let time = archive_reader.header().timestamp;
+        let time = archive.archive_data.timestamp;
         let time_path = output.join(".time");
 
         // Always write the timestamp in big-endian for consistency
         std::fs::write(&time_path, time.to_be_bytes())
             .map_err(|e| format!("failed to write .time file: {e}"))?;
 
-        println!("Extracted {extracted} files to {}", output.display());
+        println!(
+            "Extracted {} files to {}",
+            archive.entries.len(),
+            output.display()
+        );
         Ok(())
     }
 }
