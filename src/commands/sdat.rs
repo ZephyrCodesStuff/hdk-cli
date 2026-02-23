@@ -3,7 +3,7 @@ use clap::Subcommand;
 use hdk_archive::{
     archive::ArchiveReader,
     sharc::{builder::SharcBuilder, structs::SharcArchive},
-    structs::Endianness,
+    structs::{ArchiveFlags, ArchiveFlagsValue, Endianness},
 };
 use rand::RngExt;
 use std::path::{Path, PathBuf};
@@ -34,6 +34,10 @@ pub enum Sdat {
         /// Endianness for the inner SHARC/BAR archive (default: big-endian)
         #[clap(short, long, default_value = "big")]
         endian: EndianArg,
+
+        /// Whether to protect the inner SHARC/BAR archive
+        #[clap(short, long, default_value_t = false)]
+        protect: bool,
     },
     /// Extract an SDAT archive
     #[clap(alias = "x")]
@@ -82,7 +86,8 @@ impl Execute for Sdat {
                 output,
                 archive_type,
                 endian,
-            } => Self::create(&input, &output, archive_type, endian),
+                protect,
+            } => Self::create(&input, &output, archive_type, endian, protect),
             Self::Extract(args) => Self::extract(&args.input, &args.output),
             Self::Inspect(args) => Self::inspect(&args.input),
         };
@@ -99,9 +104,17 @@ impl Sdat {
         output: &Path,
         _archive_type: ArchiveType,
         endian: EndianArg,
+        protect: bool,
     ) -> Result<(), String> {
         let endianess = Endianness::from(endian);
-        let mut archive_writer = SharcBuilder::new(SHARC_SDAT_KEY, SHARC_FILES_KEY);
+        let flags = if protect {
+            ArchiveFlags(ArchiveFlagsValue::Protected.into())
+        } else {
+            ArchiveFlags::default()
+        };
+
+        let mut archive_writer =
+            SharcBuilder::new(SHARC_SDAT_KEY, SHARC_FILES_KEY).with_flags(flags);
 
         // Check if the input directory has a `.time` file for timestamp.
         // If so, parse as i32 and use it as the archive timestamp.
