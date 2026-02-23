@@ -296,6 +296,20 @@ impl Sdat {
                     format!("failed to write output file {}: {e}", output_path.display())
                 })?;
             }
+
+            let time = bar.archive_data.timestamp;
+            let time_path = output.join(".time");
+
+            std::fs::write(&time_path, time.to_be_bytes())
+                .map_err(|e| format!("failed to write .time file: {e}"))?;
+
+            println!(
+                "Extracted {} files to {}",
+                bar.entries.len(),
+                output.display()
+            );
+
+            return Ok(());
         }
 
         Err("file does not contain a supported SHARC or BAR archive".to_string())
