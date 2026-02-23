@@ -8,11 +8,11 @@ name = "hdk"
 path = "src/main.rs"
 
 [dependencies]
-hdk-firmware = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "feat/binrw" }
-hdk-archive = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "feat/binrw" }
-hdk-sdat = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "feat/binrw" }
-hdk-secure = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "feat/binrw" }
-hdk-comp = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "feat/binrw" }
+hdk-firmware = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
+hdk-archive = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
+hdk-sdat = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
+hdk-secure = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
+hdk-comp = { git = "https://github.com/ZephyrCodesStuff/hdk-rs", branch = "main" }
 
 clap = { version = "4.5.53", features = ["derive"] }
 enum_dispatch = "0.3"

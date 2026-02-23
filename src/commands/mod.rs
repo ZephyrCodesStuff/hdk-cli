@@ -103,8 +103,8 @@ pub enum EndianArg {
 impl From<EndianArg> for hdk_archive::structs::Endianness {
     fn from(value: EndianArg) -> Self {
         match value {
-            EndianArg::Little => hdk_archive::structs::Endianness::Little,
-            EndianArg::Big => hdk_archive::structs::Endianness::Big,
+            EndianArg::Little => Self::Little,
+            EndianArg::Big => Self::Big,
         }
     }
 }
