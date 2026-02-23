@@ -3,7 +3,6 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use hdk_archive::archive::ArchiveReader;
 use hdk_secure::hash::AfsHash;
 
 /// Confirm overwriting an existing file.
@@ -141,52 +140,4 @@ pub fn read_file_bytes(path: &Path) -> Result<Vec<u8>, String> {
         .read_to_end(&mut data)
         .map_err(|e| format!("failed to read file {}: {e}", path.display()))?;
     Ok(data)
-}
-
-/// Extract all entries from an `ArchiveReader` into `output_dir`.
-///
-/// Callers provide a mapping from entry metadata to a relative output path.
-///
-/// # Arguments
-///
-/// - `archive`: ArchiveReader implementation to extract from
-/// - `output_dir`: Output directory to extract files into
-/// - `output_rel_path`: Function mapping entry metadata to relative output path
-///
-/// # Returns
-///
-/// The number of extracted entries, or an error string.
-pub fn extract_archive_entries<A, F>(
-    archive: &mut A,
-    output_dir: &Path,
-    mut output_rel_path: F,
-) -> Result<usize, String>
-where
-    A: ArchiveReader,
-    F: FnMut(&A::Metadata) -> PathBuf,
-{
-    archive
-        .for_each_entry(|mut entry| -> std::io::Result<()> {
-            let rel_path = output_rel_path(&entry.metadata);
-            let output_path = output_dir.join(rel_path);
-
-            let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
-                std::io::Error::other(format!(
-                    "failed to create output file {}: {e}",
-                    output_path.display()
-                ))
-            })?;
-
-            std::io::copy(&mut entry.reader, &mut output_file).map_err(|e| {
-                std::io::Error::other(format!(
-                    "failed to write entry to {}: {e}",
-                    output_path.display()
-                ))
-            })?;
-
-            Ok(())
-        })
-        .map_err(|e| format!("failed to extract entries: {e}"))?;
-
-    Ok(archive.entry_count())
 }

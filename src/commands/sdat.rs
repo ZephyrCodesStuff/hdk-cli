@@ -1,7 +1,7 @@
 use binrw::{BinRead, Endian};
 use clap::Subcommand;
 use hdk_archive::{
-    archive::ArchiveReader,
+    bar::structs::BarArchive,
     sharc::{builder::SharcBuilder, structs::SharcArchive},
     structs::{ArchiveFlags, ArchiveFlagsValue, Endianness},
 };
@@ -252,27 +252,50 @@ impl Sdat {
         }
 
         // Try BAR
-        if let Ok(mut archive_reader) = hdk_archive::bar::reader::BarReader::open(
-            std::io::Cursor::new(archive_bytes),
-            crate::keys::BAR_DEFAULT_KEY,
-            crate::keys::BAR_SIGNATURE_KEY,
-            None,
-        ) {
+        if let Ok(bar) = match endian {
+            Endian::Little => BarArchive::read_le_args(
+                &mut reader,
+                (
+                    crate::keys::BAR_DEFAULT_KEY,
+                    crate::keys::BAR_SIGNATURE_KEY,
+                    archive_bytes.len() as u32,
+                ),
+            ),
+            Endian::Big => BarArchive::read_be_args(
+                &mut reader,
+                (
+                    crate::keys::BAR_DEFAULT_KEY,
+                    crate::keys::BAR_SIGNATURE_KEY,
+                    archive_bytes.len() as u32,
+                ),
+            ),
+        } {
             common::create_output_dir(output)?;
 
-            let extracted = common::extract_archive_entries(&mut archive_reader, output, |m| {
-                m.name_hash.to_string().into()
-            })?;
+            for entry in &bar.entries {
+                let data = bar
+                    .entry_data(
+                        &mut reader,
+                        entry,
+                        &crate::keys::BAR_DEFAULT_KEY,
+                        &crate::keys::BAR_SIGNATURE_KEY,
+                    )
+                    .map_err(|e| format!("failed to read BAR entry data: {e}"))?;
 
-            // Save the `.time` as BE since it's easier to manually patch
-            let time = archive_reader.header().timestamp;
-            let time_path = output.join(".time");
+                let rel_path = entry.name_hash.to_string();
+                let output_path = output.join(rel_path);
 
-            std::fs::write(&time_path, time.to_be_bytes())
-                .map_err(|e| format!("failed to write .time file: {e}"))?;
+                let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
+                    format!(
+                        "failed to create output file {}: {e}",
+                        output_path.display()
+                    )
+                })?;
 
-            println!("Extracted {extracted} files to {}", output.display());
-            return Ok(());
+                std::io::copy(&mut &data[..], &mut output_file).map_err(|e| {
+                    format!("failed to write output file {}: {e}", output_path.display())
+                })?;
+            }
         }
 
         Err("file does not contain a supported SHARC or BAR archive".to_string())
@@ -324,40 +347,38 @@ impl Sdat {
         }
 
         // Try BAR
-        if let Ok(archive_reader) = hdk_archive::bar::reader::BarReader::open(
-            std::io::Cursor::new(archive_bytes.clone()),
-            crate::keys::BAR_DEFAULT_KEY,
-            crate::keys::BAR_SIGNATURE_KEY,
-            None,
-        ) {
-            let header = archive_reader.header();
+        if let Ok(bar) = match endian {
+            Endian::Little => BarArchive::read_le_args(
+                &mut reader,
+                (
+                    crate::keys::BAR_DEFAULT_KEY,
+                    crate::keys::BAR_SIGNATURE_KEY,
+                    archive_bytes.len() as u32,
+                ),
+            ),
+            Endian::Big => BarArchive::read_be_args(
+                &mut reader,
+                (
+                    crate::keys::BAR_DEFAULT_KEY,
+                    crate::keys::BAR_SIGNATURE_KEY,
+                    archive_bytes.len() as u32,
+                ),
+            ),
+        } {
+            let header = bar.archive_data;
             println!("Archive Type: BAR");
             println!("Timestamp: {}", header.timestamp);
-            println!("Entry Count: {}", archive_reader.entry_count());
+            println!("Entry Count: {}", bar.entries.len());
             println!("\nEntries:");
-
-            let mut archive_reader = hdk_archive::bar::reader::BarReader::open(
-                std::io::Cursor::new(archive_bytes),
-                crate::keys::BAR_DEFAULT_KEY,
-                crate::keys::BAR_SIGNATURE_KEY,
-                None,
-            )
-            .map_err(|e| format!("failed to open BAR reader: {e}"))?;
-
-            archive_reader
-                .for_each_entry(|entry| {
-                    let name_hash = entry.metadata.name_hash;
-                    println!(
-                        "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}",
-                        name_hash,
-                        entry.metadata.offset,
-                        entry.metadata.uncompressed_size,
-                        entry.metadata.compressed_size
-                    );
-                    Ok(())
-                })
-                .map_err(|e| format!("failed to iterate entries: {e}"))?;
-
+            for entry in &bar.entries {
+                println!(
+                    "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}",
+                    entry.name_hash,
+                    entry.location.0,
+                    entry.uncompressed_size,
+                    entry.compressed_size
+                );
+            }
             return Ok(());
         }
 
