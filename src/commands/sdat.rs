@@ -133,6 +133,7 @@ impl Sdat {
             }
         }
 
+        let output_file = common::create_output_file(output)?;
         let mut files = common::collect_input_files(input)?;
 
         // Sort by signed AfsHash value (ascending)
@@ -179,7 +180,6 @@ impl Sdat {
             .map_err(|e| format!("failed to write SDAT: {e}"))?;
 
         // Write SDAT to output file
-        let output_file = common::create_output_file(output)?;
         std::io::copy(&mut &sdat_bytes[..], &mut &output_file)
             .map_err(|e| format!("failed to write SDAT to file: {e}"))?;
 
