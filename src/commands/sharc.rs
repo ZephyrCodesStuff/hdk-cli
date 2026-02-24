@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::{
     commands::{Execute, IOArgs, common},
-    keys::{SHARC_DEFAULT_KEY, SHARC_FILES_KEY, SHARC_SDAT_KEY},
+    keys::{SHARC_DEFAULT_KEY, SHARC_FILES_KEY},
     magic,
 };
 use binrw::{BinRead, Endian};
@@ -41,7 +41,7 @@ impl Sharc {
         // TODO: let user pick endianness
         let endianess = Endianness::Big;
 
-        let mut archive_writer = SharcBuilder::new(SHARC_SDAT_KEY, SHARC_FILES_KEY);
+        let mut archive_writer = SharcBuilder::new(SHARC_DEFAULT_KEY, SHARC_FILES_KEY);
 
         // Check if the input directory has a `.time` file for timestamp.
         // If so, parse as i32 and use it as the archive timestamp.
