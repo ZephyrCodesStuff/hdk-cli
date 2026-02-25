@@ -317,19 +317,27 @@ impl Sdat {
                 })
                 .collect();
 
-            for (rel, data) in results {
-                let output_path = output.join(rel);
-                let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
-                    format!(
-                        "failed to create output file {}: {e}",
-                        output_path.display()
-                    )
-                })?;
-
-                std::io::copy(&mut &data[..], &mut output_file).map_err(|e| {
-                    format!("failed to write output file {}: {e}", output_path.display())
-                })?;
+            #[cfg(not(feature = "rayon"))]
+            {
+                for (rel, data) in results {
+                    let output_path = output.join(rel);
+                    std::fs::write(&output_path, &data).map_err(|e| {
+                        format!(
+                            "failed to write output file {}: {e}",
+                            &output_path.display()
+                        )
+                    })?;
+                }
             }
+
+            #[cfg(feature = "rayon")]
+            results
+                .into_par_iter()
+                .try_for_each(|(rel, data)| {
+                    let output_path = output.join(rel);
+                    std::fs::write(output_path, &data)
+                })
+                .map_err(|e| e.to_string())?;
 
             let time = sharc.archive_data.timestamp;
             let time_path = output.join(".time");
