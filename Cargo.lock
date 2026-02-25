@@ -336,9 +336,9 @@ checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
 name = "cloudflare-zlib-sys"
-version = "0.3.6"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32b785d676ed9aed12ebbfb77c5e02d4bb888b652a6e88acbf31ab81a84d5983"
+checksum = "d11ad9b1a14235a8ce48c2622c57fde45c3f8e7d29344775583a847d245360be"
 dependencies = [
  "cc",
 ]
@@ -367,6 +367,15 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
+
+[[package]]
+name = "copy_dir"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "543d1dd138ef086e2ff05e3a48cf9da045da2033d16f8538fd76b86cd49b2ca3"
+dependencies = [
+ "walkdir",
+]
 
 [[package]]
 name = "cpufeatures"
@@ -866,7 +875,7 @@ checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 [[package]]
 name = "hdk-archive"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#0febc4db095d1e59b45e289fd30d19f71c90a076"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#b5150c9d3b44ffffb8108c95de96a332af91b5d6"
 dependencies = [
  "aes",
  "binrw",
@@ -913,17 +922,19 @@ dependencies = [
 [[package]]
 name = "hdk-comp"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#0febc4db095d1e59b45e289fd30d19f71c90a076"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#b5150c9d3b44ffffb8108c95de96a332af91b5d6"
 dependencies = [
  "byteorder",
  "flate2",
+ "isal-rs",
  "lzma-rust2",
+ "smallvec",
 ]
 
 [[package]]
 name = "hdk-firmware"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#0febc4db095d1e59b45e289fd30d19f71c90a076"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#b5150c9d3b44ffffb8108c95de96a332af91b5d6"
 dependencies = [
  "aes",
  "byteorder",
@@ -940,7 +951,7 @@ dependencies = [
 [[package]]
 name = "hdk-sdat"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#0febc4db095d1e59b45e289fd30d19f71c90a076"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#b5150c9d3b44ffffb8108c95de96a332af91b5d6"
 dependencies = [
  "aes",
  "binrw",
@@ -954,7 +965,7 @@ dependencies = [
 [[package]]
 name = "hdk-secure"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#0febc4db095d1e59b45e289fd30d19f71c90a076"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#b5150c9d3b44ffffb8108c95de96a332af91b5d6"
 dependencies = [
  "binrw",
  "byteorder",
@@ -1037,6 +1048,25 @@ name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
+
+[[package]]
+name = "isal-rs"
+version = "0.5.3+496255c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec7734f9db7ef4c18bac0e94210aaa717c149b168e076ff681a56b342fca9ed"
+dependencies = [
+ "isal-sys",
+]
+
+[[package]]
+name = "isal-sys"
+version = "0.5.3+496255c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aefc9239959a60eaba201ccdd99897b5270be98d01f561c2166f5e3343e5a29b"
+dependencies = [
+ "cc",
+ "copy_dir",
+]
 
 [[package]]
 name = "itertools"
