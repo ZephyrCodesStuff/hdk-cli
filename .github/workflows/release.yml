@@ -44,23 +44,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y nasm
       
-      - name: Install dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          choco install nasm
-          # Add NASM to the PATH for subsequent steps
-          echo "C:\Program Files\NASM" >> $GITHUB_PATH
-      
-      - name: Build release
-        if: matrix.os != 'macos-latest'
-        shell: bash
-        run: cargo build --release --target ${{ matrix.target }} --all-features
-
-        # ISA-L works well on x86_64, but on macOS ARM64 the underlying isal-sys C library won't build
-      - name: Build release (macOS)
-        if: matrix.os == 'macos-latest'
+      - name: Build release (Windows and macOS, no ISA-L support)
+        if: matrix.os != 'ubuntu-latest'
         shell: bash
         run: cargo build --release --target ${{ matrix.target }} --features rayon,memmap2
+
+      - name: Build release (Linux, ISA-L support)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: cargo build --release --target ${{ matrix.target }} --all-features
 
       # We force bash on all runners so the `mv` command works universally
       - name: Rename binary
