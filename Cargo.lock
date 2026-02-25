@@ -866,7 +866,7 @@ checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 [[package]]
 name = "hdk-archive"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#e4ab353e5df6038b530a76ced71efde894c93b60"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#d6830fb3f35ec893dc59b41cf963f55f438aa0cf"
 dependencies = [
  "aes",
  "binrw",
@@ -880,6 +880,7 @@ dependencies = [
  "num_enum",
  "rand 0.9.2",
  "sha1_smol",
+ "smallvec",
  "walkdir",
 ]
 
@@ -905,13 +906,14 @@ dependencies = [
  "rand 0.10.0",
  "rayon",
  "sha1_smol",
+ "smallvec",
  "walkdir",
 ]
 
 [[package]]
 name = "hdk-comp"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#e4ab353e5df6038b530a76ced71efde894c93b60"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#d6830fb3f35ec893dc59b41cf963f55f438aa0cf"
 dependencies = [
  "byteorder",
  "flate2",
@@ -921,7 +923,7 @@ dependencies = [
 [[package]]
 name = "hdk-firmware"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#e4ab353e5df6038b530a76ced71efde894c93b60"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#d6830fb3f35ec893dc59b41cf963f55f438aa0cf"
 dependencies = [
  "aes",
  "byteorder",
@@ -938,7 +940,7 @@ dependencies = [
 [[package]]
 name = "hdk-sdat"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#e4ab353e5df6038b530a76ced71efde894c93b60"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#d6830fb3f35ec893dc59b41cf963f55f438aa0cf"
 dependencies = [
  "aes",
  "binrw",
@@ -951,7 +953,7 @@ dependencies = [
 [[package]]
 name = "hdk-secure"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#e4ab353e5df6038b530a76ced71efde894c93b60"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#d6830fb3f35ec893dc59b41cf963f55f438aa0cf"
 dependencies = [
  "binrw",
  "byteorder",
@@ -1553,6 +1555,12 @@ name = "simd-adler32"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
+
+[[package]]
+name = "smallvec"
+version = "1.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "spki"

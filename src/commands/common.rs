@@ -1,9 +1,11 @@
 //! Common utilities for archive commands.
 
+use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use hdk_secure::hash::AfsHash;
+use smallvec::SmallVec;
 
 /// Confirm overwriting an existing file.
 /// Returns `Ok(File)` if the user confirms or file doesn't exist.
@@ -133,11 +135,20 @@ pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf, AfsHas
 }
 
 /// Reads a file into a byte vector.
-pub fn read_file_bytes(path: &Path) -> Result<Vec<u8>, String> {
-    let mut data = Vec::new();
-    std::fs::File::open(path)
-        .map_err(|e| format!("failed to open file {}: {e}", path.display()))?
-        .read_to_end(&mut data)
-        .map_err(|e| format!("failed to read file {}: {e}", path.display()))?;
-    Ok(data)
+pub fn read_file_bytes(path: &Path) -> Result<SmallVec<[u8; 16_384]>, std::io::Error> {
+    let mut file = File::open(path)?;
+    let metadata = file.metadata()?;
+    let size = metadata.len() as usize;
+
+    // Create a SmallVec with the correct capacity
+    let mut buffer: SmallVec<[u8; 16384]> = SmallVec::with_capacity(size);
+
+    // Safety: SmallVec doesn't initialize its memory for speed.
+    // We use the 'Read' trait to fill the internal space.
+    unsafe {
+        buffer.set_len(size);
+    }
+
+    file.read_exact(&mut buffer)?;
+    Ok(buffer)
 }

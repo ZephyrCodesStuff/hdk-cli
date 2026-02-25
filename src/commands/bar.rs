@@ -48,10 +48,17 @@ impl Bar {
         // If so, parse as i32 and use it as the archive timestamp.
         let time_path = input.join(".time");
         if time_path.exists() {
-            let time_bytes = common::read_file_bytes(&time_path)?;
+            let time_bytes = common::read_file_bytes(&time_path)
+                .map_err(|e| format!("failed to read .time file: {e}"))?;
+
             if time_bytes.len() == 4 {
-                // Always read as LE
-                let timestamp = i32::from_be_bytes(time_bytes.try_into().unwrap());
+                // Always read as BE
+                let timestamp = i32::from_be_bytes([
+                    time_bytes[0],
+                    time_bytes[1],
+                    time_bytes[2],
+                    time_bytes[3],
+                ]);
                 archive_writer = archive_writer.with_timestamp(timestamp);
                 println!("Using timestamp from .time file: {}", timestamp);
             } else {
@@ -68,7 +75,8 @@ impl Bar {
         files.sort_by_key(|(_, _, a_hash)| a_hash.0);
 
         for (abs_path, rel_path, name_hash) in files {
-            let data = common::read_file_bytes(&abs_path)?;
+            let data = common::read_file_bytes(&abs_path)
+                .map_err(|e| format!("failed to read file {}: {e}", abs_path.display()))?;
 
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
@@ -96,7 +104,9 @@ impl Bar {
     }
 
     pub fn extract(input: &Path, output: &Path) -> Result<(), String> {
-        let data = common::read_file_bytes(input)?;
+        let data = common::read_file_bytes(input)
+            .map_err(|e| format!("failed to read archive file {}: {e}", input.display()))?;
+
         let magic: [u8; 4] = data
             .get(0..4)
             .ok_or_else(|| "File too small to be a valid archive".to_string())?

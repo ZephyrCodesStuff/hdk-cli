@@ -3,6 +3,7 @@ use crate::commands::{
 };
 
 use hdk_secure::hash::AfsHash;
+use smallvec::SmallVec;
 
 use std::path::PathBuf;
 
@@ -123,6 +124,6 @@ pub struct CompressedFile {
     name_hash: AfsHash,
     rel_path: PathBuf,
     uncompressed_size: usize,
-    compressed_data: Vec<u8>,
+    compressed_data: SmallVec<[u8; 16_384]>, // Many entries are below this
     iv: [u8; 8],
 }

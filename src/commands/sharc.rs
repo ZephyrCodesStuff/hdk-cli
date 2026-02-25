@@ -53,10 +53,17 @@ impl Sharc {
         // If so, parse as i32 and use it as the archive timestamp.
         let time_path = input.join(".time");
         if time_path.exists() {
-            let time_bytes = common::read_file_bytes(&time_path)?;
+            let time_bytes = common::read_file_bytes(&time_path)
+                .map_err(|e| format!("failed to read .time file: {e}"))?;
+
             if time_bytes.len() == 4 {
-                // Always read as LE
-                let timestamp = i32::from_be_bytes(time_bytes.try_into().unwrap());
+                // Always read as BE
+                let timestamp = i32::from_be_bytes([
+                    time_bytes[0],
+                    time_bytes[1],
+                    time_bytes[2],
+                    time_bytes[3],
+                ]);
                 archive_writer = archive_writer.with_timestamp(timestamp);
                 println!("Using timestamp from .time file: {}", timestamp);
             } else {
@@ -90,7 +97,6 @@ impl Sharc {
                     .compress_data(&data, CompressionType::Encrypted, &iv)
                     .expect("failed to compress data");
 
-                println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
                 CompressedFile {
                     name_hash,
                     rel_path,
@@ -138,6 +144,7 @@ impl Sharc {
         } in compressed_data
         {
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
+
             archive_writer.add_compressed_entry(
                 name_hash,
                 compressed,
