@@ -52,7 +52,10 @@ impl Execute for Map {
 
         let output_dir = self
             .output
-            .unwrap_or_else(|| self.input.with_added_extension(DEFAULT_OUTPUT_SUFFIX));
+            .clone() // Clone here to use it for the print later
+            .unwrap_or_else(|| self.input.with_extension(DEFAULT_OUTPUT_SUFFIX));
+
+        mapper = mapper.with_output_folder(output_dir.clone());
 
         println!("Mapping files to: {}", output_dir.display());
 
