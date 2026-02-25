@@ -50,22 +50,17 @@ jobs:
           choco install nasm
           # Add NASM to the PATH for subsequent steps
           echo "C:\Program Files\NASM" >> $GITHUB_PATH
-        
-      - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest'
-        run: brew install nasm autoconf automake libtool
       
       - name: Build release
         if: matrix.os != 'macos-latest'
         shell: bash
         run: cargo build --release --target ${{ matrix.target }} --all-features
 
-      - name: Build release
+        # ISA-L works well on x86_64, but on macOS ARM64 the underlying isal-sys C library won't build
+      - name: Build release (macOS)
         if: matrix.os == 'macos-latest'
         shell: bash
-        env:
-          CFLAGS: "-Qunused-arguments"
-        run: cargo build --release --target ${{ matrix.target }} --all-features
+        run: cargo build --release --target ${{ matrix.target }} --features rayon,memmap2
 
       # We force bash on all runners so the `mv` command works universally
       - name: Rename binary
