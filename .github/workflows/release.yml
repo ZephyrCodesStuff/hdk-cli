@@ -22,11 +22,11 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             bin_name: hdk-mac-arm64
-            ext: ''
+            ext: ""
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             bin_name: hdk-linux-x86
-            ext: ''
+            ext: ""
 
     steps:
       - name: Checkout
@@ -38,7 +38,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build release
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} --features rayon,memmap2
 
       # We force bash on all runners so the `mv` command works universally
       - name: Rename binary
