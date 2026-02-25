@@ -1,6 +1,9 @@
 use crate::commands::{
     bar::Bar, compress::Compress, crypt::Crypt, map::Map, sdat::Sdat, sharc::Sharc,
 };
+
+use hdk_secure::hash::AfsHash;
+
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -114,4 +117,12 @@ impl From<EndianArg> for hdk_archive::structs::Endianness {
 pub enum ArchiveType {
     Sharc,
     Bar,
+}
+
+pub struct CompressedFile {
+    name_hash: AfsHash,
+    rel_path: PathBuf,
+    uncompressed_size: usize,
+    compressed_data: Vec<u8>,
+    iv: [u8; 8],
 }

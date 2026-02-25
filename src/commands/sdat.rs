@@ -8,13 +8,11 @@ use rand::RngExt;
 use hdk_archive::{
     bar::structs::BarArchive,
     sharc::{builder::SharcBuilder, structs::SharcArchive},
-    structs::{ArchiveFlags, ArchiveFlagsValue, Endianness},
+    structs::{ArchiveFlags, ArchiveFlagsValue, CompressionType, Endianness},
 };
 
-use hdk_secure::hash::AfsHash;
-
 use crate::{
-    commands::{ArchiveType, EndianArg, Execute, IArg, IOArgs, common},
+    commands::{ArchiveType, CompressedFile, EndianArg, Execute, IArg, IOArgs, common},
     keys::{SHARC_FILES_KEY, SHARC_SDAT_KEY},
     magic,
 };
@@ -148,7 +146,7 @@ impl Sdat {
         files.sort_by_key(|a| a.2.0);
 
         #[cfg(not(feature = "rayon"))]
-        let compressed_data: Vec<(AfsHash, PathBuf, Vec<u8>, [u8; 8])> = files
+        let compressed_data: Vec<CompressedFile> = files
             .into_iter()
             .map(|(abs_path, rel_path, name_hash)| {
                 use hdk_archive::structs::CompressionType;
@@ -165,12 +163,18 @@ impl Sdat {
                     .compress_data(&data, CompressionType::Encrypted, &iv)
                     .expect("failed to compress data");
 
-                (name_hash, rel_path, compressed, iv)
+                CompressedFile {
+                    name_hash,
+                    rel_path,
+                    uncompressed_size: data.len(),
+                    compressed_data: compressed,
+                    iv,
+                }
             })
             .collect::<Vec<_>>();
 
         #[cfg(feature = "rayon")]
-        let compressed_data: Vec<(AfsHash, PathBuf, Vec<u8>, [u8; 8])> = files
+        let compressed_data: Vec<CompressedFile> = files
             .into_par_iter()
             .map(|(abs_path, rel_path, name_hash)| {
                 use hdk_archive::structs::CompressionType;
@@ -187,18 +191,32 @@ impl Sdat {
                     .compress_data(&data, CompressionType::Encrypted, &iv)
                     .expect("failed to compress data");
 
-                (name_hash, rel_path, compressed, iv)
+                CompressedFile {
+                    name_hash,
+                    rel_path,
+                    uncompressed_size: data.len(),
+                    compressed_data: compressed,
+                    iv,
+                }
             })
             .collect();
 
-        for (name_hash, rel_path, compressed, iv) in compressed_data {
+        for CompressedFile {
+            name_hash,
+            rel_path,
+            uncompressed_size,
+            compressed_data: compressed,
+            iv,
+        } in compressed_data
+        {
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
-            archive_writer.add_entry(
+            archive_writer.add_compressed_entry(
                 name_hash,
                 compressed,
+                uncompressed_size as u32,
                 // TODO: let user pick how to compress/encrypt files
-                hdk_archive::structs::CompressionType::Encrypted,
+                CompressionType::Encrypted,
                 iv,
             );
         }
