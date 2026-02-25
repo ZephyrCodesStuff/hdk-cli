@@ -1,18 +1,26 @@
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use binrw::{BinRead, Endian};
 use clap::Subcommand;
+use rand::RngExt;
+
 use hdk_archive::{
     bar::structs::BarArchive,
     sharc::{builder::SharcBuilder, structs::SharcArchive},
     structs::{ArchiveFlags, ArchiveFlagsValue, Endianness},
 };
-use rand::RngExt;
-use std::path::{Path, PathBuf};
+
+use hdk_secure::hash::AfsHash;
 
 use crate::{
     commands::{ArchiveType, EndianArg, Execute, IArg, IOArgs, common},
     keys::{SHARC_FILES_KEY, SHARC_SDAT_KEY},
     magic,
 };
+
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
 
 #[derive(Subcommand, Debug)]
 pub enum Sdat {
@@ -133,24 +141,62 @@ impl Sdat {
             }
         }
 
-        let output_file = common::create_output_file(output)?;
+        let _ = common::create_output_file(output)?;
         let mut files = common::collect_input_files(input)?;
 
         // Sort by signed AfsHash value (ascending)
         files.sort_by_key(|a| a.2.0);
 
-        for (abs_path, rel_path, name_hash) in files {
-            let data = common::read_file_bytes(&abs_path)?;
+        #[cfg(not(feature = "rayon"))]
+        let compressed_data: Vec<(AfsHash, PathBuf, Vec<u8>, [u8; 8])> = files
+            .into_iter()
+            .map(|(abs_path, rel_path, name_hash)| {
+                use hdk_archive::structs::CompressionType;
 
+                let iv = {
+                    let mut iv = [0u8; 8];
+                    let mut rng = rand::rng();
+                    rng.fill(&mut iv);
+                    iv
+                };
+
+                let data = common::read_file_bytes(&abs_path).expect("failed to read input file");
+                let compressed = archive_writer
+                    .compress_data(&data, CompressionType::Encrypted, &iv)
+                    .expect("failed to compress data");
+
+                (name_hash, rel_path, compressed, iv)
+            })
+            .collect::<Vec<_>>();
+
+        #[cfg(feature = "rayon")]
+        let compressed_data: Vec<(AfsHash, PathBuf, Vec<u8>, [u8; 8])> = files
+            .into_par_iter()
+            .map(|(abs_path, rel_path, name_hash)| {
+                use hdk_archive::structs::CompressionType;
+
+                let iv = {
+                    let mut iv = [0u8; 8];
+                    let mut rng = rand::rng();
+                    rng.fill(&mut iv);
+                    iv
+                };
+
+                let data = common::read_file_bytes(&abs_path).expect("failed to read input file");
+                let compressed = archive_writer
+                    .compress_data(&data, CompressionType::Encrypted, &iv)
+                    .expect("failed to compress data");
+
+                (name_hash, rel_path, compressed, iv)
+            })
+            .collect();
+
+        for (name_hash, rel_path, compressed, iv) in compressed_data {
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
-
-            let mut iv = [0u8; 8];
-            let mut rng = rand::rng();
-            rng.fill(&mut iv);
 
             archive_writer.add_entry(
                 name_hash,
-                data,
+                compressed,
                 // TODO: let user pick how to compress/encrypt files
                 hdk_archive::structs::CompressionType::Encrypted,
                 iv,
@@ -180,8 +226,8 @@ impl Sdat {
             .map_err(|e| format!("failed to write SDAT: {e}"))?;
 
         // Write SDAT to output file
-        std::io::copy(&mut &sdat_bytes[..], &mut &output_file)
-            .map_err(|e| format!("failed to write SDAT to file: {e}"))?;
+        std::fs::write(output, &sdat_bytes)
+            .map_err(|e| format!("failed to write output file: {e}"))?;
 
         println!("Created SDAT archive: {}", output.display());
         Ok(())
@@ -203,28 +249,51 @@ impl Sdat {
         // Try SHARC first, then BAR. If neither work, return error.
         let magic: &[u8; 4] = &archive_bytes[0..4].try_into().unwrap();
         let endian: Endian = magic::magic_to_endianess(magic).into();
-        let mut reader = std::io::Cursor::new(archive_bytes.clone());
+
+        // Share archive bytes across threads if rayon is enabled
+        let shared = Arc::new(archive_bytes);
+        let mut reader = std::io::Cursor::new(&shared[..]);
 
         if let Ok(sharc) = match endian {
-            Endian::Little => SharcArchive::read_le_args(
-                &mut reader,
-                (SHARC_SDAT_KEY, archive_bytes.len() as u32),
-            ),
-            Endian::Big => SharcArchive::read_be_args(
-                &mut reader,
-                (SHARC_SDAT_KEY, archive_bytes.len() as u32),
-            ),
+            Endian::Little => {
+                SharcArchive::read_le_args(&mut reader, (SHARC_SDAT_KEY, shared.len() as u32))
+            }
+            Endian::Big => {
+                SharcArchive::read_be_args(&mut reader, (SHARC_SDAT_KEY, shared.len() as u32))
+            }
         } {
             common::create_output_dir(output)?;
 
-            for entry in &sharc.entries {
-                let data = sharc
-                    .entry_data(&mut reader, entry)
-                    .map_err(|e| format!("failed to read SHARC entry data: {e}"))?;
+            #[cfg(not(feature = "rayon"))]
+            let results: Vec<(String, Vec<u8>)> = sharc
+                .entries
+                .iter()
+                .map(|entry| {
+                    let mut local_reader = std::io::Cursor::new(&shared[..]);
+                    let data = sharc
+                        .entry_data(&mut local_reader, entry)
+                        .expect("Failed to process entry");
 
-                let rel_path = entry.name_hash.to_string();
-                let output_path = output.join(rel_path);
+                    (entry.name_hash.to_string(), data)
+                })
+                .collect();
 
+            #[cfg(feature = "rayon")]
+            let results: Vec<(String, Vec<u8>)> = sharc
+                .entries
+                .par_iter()
+                .map(|entry| {
+                    let mut local_reader = std::io::Cursor::new(&shared[..]);
+                    let extracted_data = sharc
+                        .entry_data(&mut local_reader, entry)
+                        .expect("Failed to process entry");
+
+                    (entry.name_hash.to_string(), extracted_data)
+                })
+                .collect();
+
+            for (rel, data) in results {
+                let output_path = output.join(rel);
                 let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
                     format!(
                         "failed to create output file {}: {e}",
@@ -252,13 +321,15 @@ impl Sdat {
         }
 
         // Try BAR
+        // Recreate reader from shared bytes for BAR parsing
+        let mut reader = std::io::Cursor::new(&shared[..]);
         if let Ok(bar) = match endian {
             Endian::Little => BarArchive::read_le_args(
                 &mut reader,
                 (
                     crate::keys::BAR_DEFAULT_KEY,
                     crate::keys::BAR_SIGNATURE_KEY,
-                    archive_bytes.len() as u32,
+                    shared.len() as u32,
                 ),
             ),
             Endian::Big => BarArchive::read_be_args(
@@ -266,35 +337,74 @@ impl Sdat {
                 (
                     crate::keys::BAR_DEFAULT_KEY,
                     crate::keys::BAR_SIGNATURE_KEY,
-                    archive_bytes.len() as u32,
+                    shared.len() as u32,
                 ),
             ),
         } {
             common::create_output_dir(output)?;
 
-            for entry in &bar.entries {
-                let data = bar
-                    .entry_data(
-                        &mut reader,
-                        entry,
-                        &crate::keys::BAR_DEFAULT_KEY,
-                        &crate::keys::BAR_SIGNATURE_KEY,
-                    )
-                    .map_err(|e| format!("failed to read BAR entry data: {e}"))?;
+            #[cfg(not(feature = "rayon"))]
+            {
+                for entry in &bar.entries {
+                    let mut local_reader = std::io::Cursor::new(&shared[..]);
+                    let data = bar
+                        .entry_data(
+                            &mut local_reader,
+                            entry,
+                            &crate::keys::BAR_DEFAULT_KEY,
+                            &crate::keys::BAR_SIGNATURE_KEY,
+                        )
+                        .map_err(|e| format!("failed to read BAR entry data: {e}"))?;
 
-                let rel_path = entry.name_hash.to_string();
-                let output_path = output.join(rel_path);
+                    let rel_path = entry.name_hash.to_string();
+                    let output_path = output.join(rel_path);
 
-                let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
-                    format!(
-                        "failed to create output file {}: {e}",
-                        output_path.display()
-                    )
-                })?;
+                    let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
+                        format!(
+                            "failed to create output file {}: {e}",
+                            output_path.display()
+                        )
+                    })?;
 
-                std::io::copy(&mut &data[..], &mut output_file).map_err(|e| {
-                    format!("failed to write output file {}: {e}", output_path.display())
-                })?;
+                    std::io::copy(&mut &data[..], &mut output_file).map_err(|e| {
+                        format!("failed to write output file {}: {e}", output_path.display())
+                    })?;
+                }
+            }
+
+            #[cfg(feature = "rayon")]
+            {
+                let results: Vec<(String, Vec<u8>)> = bar
+                    .entries
+                    .par_iter()
+                    .map(|entry| {
+                        let local = shared.clone();
+                        let mut local_reader = std::io::Cursor::new(&local[..]);
+                        let extracted_data = bar
+                            .entry_data(
+                                &mut local_reader,
+                                entry,
+                                &crate::keys::BAR_DEFAULT_KEY,
+                                &crate::keys::BAR_SIGNATURE_KEY,
+                            )
+                            .expect("Failed to process entry");
+                        (entry.name_hash.to_string(), extracted_data)
+                    })
+                    .collect();
+
+                for (rel, data) in results {
+                    let output_path = output.join(rel);
+                    let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
+                        format!(
+                            "failed to create output file {}: {e}",
+                            output_path.display()
+                        )
+                    })?;
+
+                    std::io::copy(&mut &data[..], &mut output_file).map_err(|e| {
+                        format!("failed to write output file {}: {e}", output_path.display())
+                    })?;
+                }
             }
 
             let time = bar.archive_data.timestamp;

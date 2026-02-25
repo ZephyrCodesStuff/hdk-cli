@@ -1,17 +1,24 @@
-use std::path::Path;
+use std::path::PathBuf;
+use std::{io::Write, path::Path};
+
+use binrw::{BinRead, Endian};
+use clap::Subcommand;
+use rand::RngExt;
+
+use hdk_archive::{
+    sharc::{builder::SharcBuilder, structs::SharcArchive},
+    structs::{CompressionType, Endianness},
+};
+use hdk_secure::hash::AfsHash;
 
 use crate::{
     commands::{Execute, IOArgs, common},
     keys::{SHARC_DEFAULT_KEY, SHARC_FILES_KEY},
     magic,
 };
-use binrw::{BinRead, Endian};
-use clap::Subcommand;
-use hdk_archive::{
-    sharc::{builder::SharcBuilder, structs::SharcArchive},
-    structs::Endianness,
-};
-use rand::RngExt;
+
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
 
 #[derive(Subcommand, Debug)]
 pub enum Sharc {
@@ -42,6 +49,7 @@ impl Sharc {
         let endianess = Endianness::Big;
 
         let mut archive_writer = SharcBuilder::new(SHARC_DEFAULT_KEY, SHARC_FILES_KEY);
+        let mut output_file = common::create_output_file(output)?;
 
         // Check if the input directory has a `.time` file for timestamp.
         // If so, parse as i32 and use it as the archive timestamp.
@@ -66,75 +74,141 @@ impl Sharc {
         // This ensures they're written in the same order as the input files
         files.sort_by_key(|(_, _, a_hash)| a_hash.0);
 
-        for (abs_path, rel_path, name_hash) in files {
-            let data = common::read_file_bytes(&abs_path)?;
+        #[cfg(not(feature = "rayon"))]
+        let compressed_data: Vec<(AfsHash, PathBuf, Vec<u8>, [u8; 8])> = files
+            .into_iter()
+            .map(|(abs_path, rel_path, name_hash)| {
+                use hdk_archive::structs::CompressionType;
 
+                let iv = {
+                    let mut iv = [0u8; 8];
+                    let mut rng = rand::rng();
+                    rng.fill(&mut iv);
+                    iv
+                };
+
+                let data = common::read_file_bytes(&abs_path).expect("failed to read input file");
+                let compressed = archive_writer
+                    .compress_data(&data, CompressionType::Encrypted, &iv)
+                    .expect("failed to compress data");
+
+                println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
+                (name_hash, rel_path, compressed, iv)
+            })
+            .collect::<Vec<_>>();
+
+        #[cfg(feature = "rayon")]
+        let compressed_data: Vec<(AfsHash, PathBuf, Vec<u8>, [u8; 8])> = files
+            .into_par_iter()
+            .map(|(abs_path, rel_path, name_hash)| {
+                use hdk_archive::structs::CompressionType;
+
+                let iv = {
+                    let mut iv = [0u8; 8];
+                    let mut rng = rand::rng();
+                    rng.fill(&mut iv);
+                    iv
+                };
+
+                let data = common::read_file_bytes(&abs_path).expect("failed to read input file");
+                let compressed = archive_writer
+                    .compress_data(&data, CompressionType::Encrypted, &iv)
+                    .expect("failed to compress data");
+
+                (name_hash, rel_path, compressed, iv)
+            })
+            .collect();
+
+        for (name_hash, rel_path, compressed, iv) in compressed_data {
             println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
-
-            let mut iv = [0u8; 8];
-            let mut rng = rand::rng();
-            rng.fill(&mut iv);
-
-            archive_writer.add_entry(
-                name_hash,
-                data,
-                // TODO: allow user to specify compression type
-                hdk_archive::structs::CompressionType::Encrypted,
-                iv,
-            );
+            archive_writer.add_entry(name_hash, compressed, CompressionType::Encrypted, iv);
         }
 
-        let mut buf = Vec::new();
-        let mut writer = std::io::Cursor::new(&mut buf);
-
         archive_writer
-            .build(&mut writer, endianess.into())
+            .build(&mut output_file, endianess.into())
             .map_err(|e| format!("failed to finalize SHARC: {e}"))?;
 
-        let output_file = common::create_output_file(output)?;
-        std::io::copy(&mut buf.as_slice(), &mut &output_file)
-            .map_err(|e| format!("failed to write archive: {e}"))?;
+        output_file
+            .flush()
+            .map_err(|e| format!("failed to flush output file: {e}"))?;
 
         println!("Created SHARC archive: {}", output.display());
         Ok(())
     }
 
     pub fn extract(input: &Path, output: &Path) -> Result<(), String> {
+        #[cfg(not(feature = "memmap2"))]
         let data = std::fs::read(input).map_err(|e| format!("failed to read input file: {e}"))?;
+
+        #[cfg(feature = "memmap2")]
+        let data = {
+            let file = std::fs::File::open(input)
+                .map_err(|e| format!("failed to open input file: {e}"))?;
+            unsafe {
+                memmap2::Mmap::map(&file)
+                    .map_err(|e| format!("failed to memory-map input file: {e}"))?
+            }
+        };
+
+        let data_len = data.len() as u32;
+
+        let mut magic = [0u8; 4];
+        magic.clone_from_slice(&data[0..4]);
+
         let mut reader = std::io::Cursor::new(&data);
 
         // let mut archive_reader =
         //     hdk_archive::sharc::reader::SharcReader::open(file, crate::keys::SHARC_DEFAULT_KEY)
         //         .map_err(|e| format!("failed to open SHARC archive: {e}"))?;
 
-        let magic: &[u8; 4] = data[..4]
-            .try_into()
-            .map_err(|e| format!("failed to read magic: {e}"))?;
-
-        let endian: Endian = magic::magic_to_endianess(magic).into();
+        let endian: Endian = magic::magic_to_endianess(&magic).into();
         let sharc = match endian {
             Endian::Little => {
-                SharcArchive::read_le_args(&mut reader, (SHARC_DEFAULT_KEY, data.len() as u32))
+                SharcArchive::read_le_args(&mut reader, (SHARC_DEFAULT_KEY, data_len))
             }
-            Endian::Big => {
-                SharcArchive::read_be_args(&mut reader, (SHARC_DEFAULT_KEY, data.len() as u32))
-            }
+            Endian::Big => SharcArchive::read_be_args(&mut reader, (SHARC_DEFAULT_KEY, data_len)),
         }
         .map_err(|e| format!("failed to read SHARC archive: {e}"))?;
 
         common::create_output_dir(output)?;
 
-        for entry in &sharc.entries {
-            let data = sharc
-                .entry_data(&mut reader, entry)
-                .map_err(|e| format!("failed to read entry data: {e}"))?;
+        #[cfg(not(feature = "rayon"))]
+        let results = sharc
+            .entries
+            .iter()
+            .map(|entry| {
+                let mut local_reader = std::io::Cursor::new(&data);
+                let extracted_data = sharc
+                    .entry_data(&mut local_reader, entry)
+                    .expect("Failed to process entry");
 
-            let output_path = output.join(entry.name_hash.to_string());
-            std::fs::write(&output_path, data)
-                .map_err(|e| format!("failed to write output file: {e}"))?;
+                (entry.name_hash.to_string(), extracted_data)
+            })
+            .collect::<Vec<_>>();
+
+        #[cfg(feature = "rayon")]
+        let results: Vec<(String, Vec<u8>)> = sharc
+            .entries
+            .par_iter()
+            .map(|entry| {
+                // Each thread gets its own view of the data
+                let mut local_reader = std::io::Cursor::new(&data);
+
+                let extracted_data = sharc
+                    .entry_data(&mut local_reader, entry)
+                    .expect("Failed to process entry");
+
+                (entry.name_hash.to_string(), extracted_data)
+            })
+            .collect();
+
+        for (name_hash, extracted_data) in results {
+            let output_file = output.join(name_hash);
+            std::fs::write(&output_file, extracted_data)
+                .map_err(|e| format!("failed to write output file {}: {e}", output_file.display()))
+                .unwrap();
         }
 
-        // Save the `.time` with the archive's endianess in the output folder root
         let time = sharc.archive_data.timestamp;
         let time_path = output.join(".time");
 
