@@ -31,6 +31,23 @@
 
 > ⚠️ **Status: Work In Progress** — This tool is under active development. Commands and flags may change as the underlying library stabilises.
 
+## ⚡ Performance
+
+`hdk` and `hdk-cli` are currently **the most performant tools available for working with PlayStation Home** file formats, often by a *large* margin.
+
+An insane amount of time has been spent optimizing the core algorithms in `hdk-rs`, and `hdk-cli`, anywhere from using `smallvec` to avoid heap-allocations for small files, to parallelizing work across multiple threads with `rayon`, to using `memmap2` for zero-copy file access when possible.
+
+The sample file for benchmarking is a 1.86 retail `COREDATA.SHARC` archive, which contains 1442 entries and is fully compressed and encrypted.
+
+Benchmarks currently show these best results:
+
+- **SHARC creation**: compression takes **~0.6s** with ISA-L support, or **~2.5s** without (using `cloudflare-zlib`).
+- **SHARC extraction**: decompressing COREDATA.SHARC (1442 entries, fully compressed and encrypted) takes **~0.4s**.
+- **Reading the file**: reading and parsing COREDATA.SHARC with memory-mapping takes **~900 microseconds**; without memory-mapping it takes **~350 microseconds**.
+- **Mapping**: TBD; not yet measured.
+
+> ⚠️ **ISA-L support in CI**: only Linux currently has ISA-L support in CI, so Windows and macOS binaries are built without it. If you want to build with ISA-L support on those platforms, you will need to clone the repository and run `cargo build --release --all-features` yourself.
+
 ## 🔧 Commands
 
 The binary is invoked as `hdk`. All sub-commands support `--help` for usage details.
