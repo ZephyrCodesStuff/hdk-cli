@@ -57,7 +57,7 @@ jobs:
       
       - name: Build release
         shell: bash
-        run: cargo build --release --target ${{ matrix.target }} --features --all-features
+        run: cargo build --release --target ${{ matrix.target }} --all-features
 
       # We force bash on all runners so the `mv` command works universally
       - name: Rename binary
