@@ -53,7 +53,7 @@ jobs:
         
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
-        run: brew install nasm
+        run: brew install nasm autoconf automake libtool
       
       - name: Build release
         shell: bash
