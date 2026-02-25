@@ -36,9 +36,34 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
+      
+      # Install NASM for ISA-L build
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+      
+      - name: Install dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install nasm
+        
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install nasm
+      
       - name: Build release
-        run: cargo build --release --target ${{ matrix.target }} --features rayon,memmap2
+        shell: bash
+        run: |
+          # Define features based on OS
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            # ISA-L is flaky on Mac CI
+            FEATURES="rayon,memmap2" 
+          else
+            FEATURES="rayon,memmap2,isal"
+          fi
+          
+          cargo build --release --target ${{ matrix.target }} --features $FEATURES
 
       # We force bash on all runners so the `mv` command works universally
       - name: Rename binary
