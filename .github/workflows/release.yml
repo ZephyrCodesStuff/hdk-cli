@@ -45,8 +45,10 @@ jobs:
           sudo apt-get install -y nasm
       
       - name: Install dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        run: choco install nasm
+        run: |
+          choco install nasm
+          # Add NASM to the PATH for subsequent steps
+          echo "C:\Program Files\NASM" >> $GITHUB_PATH
         
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
@@ -54,16 +56,7 @@ jobs:
       
       - name: Build release
         shell: bash
-        run: |
-          # Define features based on OS
-          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            # ISA-L is flaky on Mac CI
-            FEATURES="rayon,memmap2" 
-          else
-            FEATURES="rayon,memmap2,isal"
-          fi
-          
-          cargo build --release --target ${{ matrix.target }} --features $FEATURES
+        run: cargo build --release --target ${{ matrix.target }} --features --all-features
 
       # We force bash on all runners so the `mv` command works universally
       - name: Rename binary
