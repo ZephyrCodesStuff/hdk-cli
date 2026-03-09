@@ -1,4 +1,7 @@
-use std::{io::Write, path::Path};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use binrw::{BinRead, Endian};
 use clap::Subcommand;
@@ -6,11 +9,11 @@ use rand::RngExt;
 
 use hdk_archive::{
     sharc::{builder::SharcBuilder, structs::SharcArchive},
-    structs::{CompressionType, Endianness},
+    structs::{ArchiveFlags, ArchiveFlagsValue, CompressionType, Endianness},
 };
 
 use crate::{
-    commands::{CompressedFile, Execute, IOArgs, common},
+    commands::{CompressedFile, EndianArg, Execute, IOArgs, common},
     keys::{SHARC_DEFAULT_KEY, SHARC_FILES_KEY},
     magic,
 };
@@ -22,7 +25,23 @@ use rayon::prelude::*;
 pub enum Sharc {
     /// Create a SHARC archive
     #[clap(alias = "c")]
-    Create(IOArgs),
+    Create {
+        /// Input directory to create SDAT from
+        #[clap(short, long)]
+        input: PathBuf,
+
+        /// Output SDAT file path
+        #[clap(short, long)]
+        output: PathBuf,
+
+        /// Endianness for the SHARC archive (default: big-endian)
+        #[clap(short, long, default_value = "big")]
+        endian: EndianArg,
+
+        /// Whether to protect the SHARC archive
+        #[clap(short, long, default_value_t = false)]
+        protect: bool,
+    },
     /// Extract a SHARC archive
     #[clap(alias = "x")]
     Extract(IOArgs),
@@ -31,7 +50,12 @@ pub enum Sharc {
 impl Execute for Sharc {
     fn execute(self) {
         let result = match self {
-            Self::Create(args) => Self::create(&args.input, &args.output),
+            Self::Create {
+                input,
+                output,
+                endian,
+                protect,
+            } => Self::create(&input, &output, endian, protect),
             Self::Extract(args) => Self::extract(&args.input, &args.output),
         };
 
@@ -42,11 +66,22 @@ impl Execute for Sharc {
 }
 
 impl Sharc {
-    pub fn create(input: &Path, output: &Path) -> Result<(), String> {
-        // TODO: let user pick endianness
-        let endianess = Endianness::Big;
+    pub fn create(
+        input: &Path,
+        output: &Path,
+        endian: EndianArg,
+        protect: bool,
+    ) -> Result<(), String> {
+        let endianness = Endianness::from(endian);
+        let flags = if protect {
+            ArchiveFlags(ArchiveFlagsValue::Protected.into())
+        } else {
+            ArchiveFlags::default()
+        };
 
-        let mut archive_writer = SharcBuilder::new(SHARC_DEFAULT_KEY, SHARC_FILES_KEY);
+        let mut archive_writer =
+            SharcBuilder::new(SHARC_DEFAULT_KEY, SHARC_FILES_KEY).with_flags(flags);
+
         let mut output_file = common::create_output_file(output)?;
 
         // Check if the input directory has a `.time` file for timestamp.
@@ -156,7 +191,7 @@ impl Sharc {
         }
 
         archive_writer
-            .build(&mut output_file, endianess.into())
+            .build(&mut output_file, endianness.into())
             .map_err(|e| format!("failed to finalize SHARC: {e}"))?;
 
         output_file
