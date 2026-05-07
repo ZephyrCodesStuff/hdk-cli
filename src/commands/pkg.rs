@@ -50,7 +50,7 @@ impl Pkg {
                 "  ID: {:X}, size: {}, data (hex): {}",
                 packet.id,
                 packet.data.len(),
-                &packet
+                packet
                     .data
                     .iter()
                     .take(16)
