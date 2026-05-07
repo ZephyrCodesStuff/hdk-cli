@@ -88,7 +88,7 @@ impl KnownFileType {
             Self::Pem => Some(*b"-----BEG"),
             // HCDB has a 2-byte segment count at bytes 6-7 that is unknown — use brute_force_hcdb_iv instead.
             Self::Hcdb => None,
-            Self::Nav => Some(*b"<XML>\n  "),
+            Self::Nav => Some(*b"<XML>\r\n "),
         }
     }
 }
