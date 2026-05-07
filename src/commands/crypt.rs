@@ -55,6 +55,8 @@ pub enum KnownFileType {
     Pem,
     /// HCDB database (`segs` + `0x01 0x05` + 2-byte segment count — brute-forced)
     Hcdb,
+    /// Navigator XML file
+    Nav,
 }
 
 impl KnownFileType {
@@ -68,6 +70,7 @@ impl KnownFileType {
             Self::Bar,
             Self::Pem,
             Self::Hcdb,
+            Self::Nav,
         ]
     }
 
@@ -85,6 +88,7 @@ impl KnownFileType {
             Self::Pem => Some(*b"-----BEG"),
             // HCDB has a 2-byte segment count at bytes 6-7 that is unknown — use brute_force_hcdb_iv instead.
             Self::Hcdb => None,
+            Self::Nav => Some(*b"<XML>\n  "),
         }
     }
 }
