@@ -112,7 +112,7 @@ impl Sdat {
         endian: EndianArg,
         protect: bool,
     ) -> Result<(), String> {
-        let endianess = Endianness::from(endian);
+        let endianness = Endianness::from(endian);
         let flags = if protect {
             ArchiveFlags(ArchiveFlagsValue::Protected.into())
         } else {
@@ -233,7 +233,7 @@ impl Sdat {
         let mut writer = std::io::Cursor::new(&mut buf);
 
         archive_writer
-            .build(&mut writer, endianess.into())
+            .build(&mut writer, endianness.into())
             .map_err(|e| format!("failed to finalize SHARC: {e}"))?;
 
         // Wrap SHARC in SDAT
