@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::{
-    commands::{Execute, IOArgs, common},
+    commands::{Execute, IArg, IOArgs, common},
     keys::{BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY},
     magic,
 };
@@ -20,6 +20,9 @@ pub enum Bar {
     /// Extract a BAR archive
     #[clap(alias = "x")]
     Extract(IOArgs),
+    /// Inspect a BAR archive and print its contents
+    #[clap(alias = "i")]
+    Inspect(IArg),
 }
 
 impl Execute for Bar {
@@ -27,6 +30,7 @@ impl Execute for Bar {
         let result = match self {
             Self::Create(args) => Self::create(&args.input, &args.output),
             Self::Extract(args) => Self::extract(&args.input, &args.output),
+            Self::Inspect(args) => Self::inspect(&args.input),
         };
 
         if let Err(e) = result {
@@ -129,15 +133,31 @@ impl Bar {
         }
         .map_err(|e| format!("failed to open BAR archive: {e}"))?;
 
+        let mut failures = Vec::new();
+        let mut success_count = 0;
+
         for entry in &archive.entries {
-            let file_data = archive
-                .entry_data(&mut reader, entry, &BAR_DEFAULT_KEY, &BAR_SIGNATURE_KEY)
-                .map_err(|e| format!("failed to read entry data: {e}"))?;
-
-            let output_path = output.join(format!("{}.bin", entry.name_hash));
-
-            std::fs::write(&output_path, file_data)
-                .map_err(|e| format!("failed to write file {}: {e}", output_path.display()))?;
+            match archive.entry_data(&mut reader, entry, &BAR_DEFAULT_KEY, &BAR_SIGNATURE_KEY) {
+                Ok(file_data) => {
+                    let output_path = output.join(format!("{}.bin", entry.name_hash));
+                    if let Err(e) = std::fs::write(&output_path, file_data) {
+                        failures.push((
+                            entry.name_hash.to_string(),
+                            format!("failed to write: {}", e),
+                            *entry,
+                        ));
+                    } else {
+                        success_count += 1;
+                    }
+                }
+                Err(e) => {
+                    failures.push((
+                        entry.name_hash.to_string(),
+                        e.to_string(),
+                        *entry,
+                    ));
+                }
+            }
         }
 
         // Save the `.time` with the archive's endianess in the output folder root
@@ -148,11 +168,62 @@ impl Bar {
         std::fs::write(&time_path, time.to_be_bytes())
             .map_err(|e| format!("failed to write .time file: {e}"))?;
 
+        if !failures.is_empty() {
+            println!("\nFailed to extract {} entries:", failures.len());
+            for (hash, error, entry) in &failures {
+                println!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
+            }
+        }
+
         println!(
-            "Extracted {} files to {}",
-            archive.entries.len(),
+            "\nExtracted {} files to {}",
+            success_count,
             output.display()
         );
+        Ok(())
+    }
+
+    pub fn inspect(input: &Path) -> Result<(), String> {
+        let data = common::read_file_bytes(input)
+            .map_err(|e| format!("failed to read archive file {}: {e}", input.display()))?;
+
+        let magic: [u8; 4] = data
+            .get(0..4)
+            .ok_or_else(|| "File too small to be a valid archive".to_string())?
+            .try_into()
+            .unwrap();
+        let endian: Endian = magic::magic_to_endianess(&magic).into();
+
+        let mut reader = std::io::Cursor::new(&data);
+
+        let archive = match endian {
+            Endian::Little => BarArchive::read_le_args(
+                &mut reader,
+                (BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY, data.len() as u32),
+            ),
+            Endian::Big => BarArchive::read_be_args(
+                &mut reader,
+                (BAR_DEFAULT_KEY, BAR_SIGNATURE_KEY, data.len() as u32),
+            ),
+        }
+        .map_err(|e| format!("failed to open BAR archive: {e}"))?;
+
+        let header = archive.archive_data;
+        println!("Archive Type: BAR");
+        println!("Timestamp: {}", header.timestamp);
+        println!("Entry Count: {}", archive.entries.len());
+        println!("\nEntries:");
+        for entry in &archive.entries {
+            println!(
+                "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}, Compression Type: {:#?}",
+                entry.name_hash,
+                entry.location.0,
+                entry.uncompressed_size,
+                entry.compressed_size,
+                entry.location.1
+            );
+        }
+
         Ok(())
     }
 }

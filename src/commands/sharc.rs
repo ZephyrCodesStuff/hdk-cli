@@ -8,12 +8,12 @@ use clap::Subcommand;
 use rand::RngExt;
 
 use hdk_archive::{
-    sharc::{builder::SharcBuilder, structs::SharcArchive},
+    sharc::{builder::SharcBuilder, structs::{SharcArchive, SharcEntry}},
     structs::{ArchiveFlags, ArchiveFlagsValue, CompressionType, Endianness},
 };
 
 use crate::{
-    commands::{CompressedFile, EndianArg, Execute, IOArgs, common},
+    commands::{CompressedFile, EndianArg, Execute, IArg, IOArgs, common},
     keys::{SHARC_DEFAULT_KEY, SHARC_FILES_KEY},
     magic,
 };
@@ -45,6 +45,9 @@ pub enum Sharc {
     /// Extract a SHARC archive
     #[clap(alias = "x")]
     Extract(IOArgs),
+    /// Inspect a SHARC archive and print its contents
+    #[clap(alias = "i")]
+    Inspect(IArg),
 }
 
 impl Execute for Sharc {
@@ -57,6 +60,7 @@ impl Execute for Sharc {
                 protect,
             } => Self::create(&input, &output, endian, protect),
             Self::Extract(args) => Self::extract(&args.input, &args.output),
+            Self::Inspect(args) => Self::inspect(&args.input),
         };
 
         if let Err(e) = result {
@@ -239,36 +243,44 @@ impl Sharc {
         common::create_output_dir(output)?;
 
         #[cfg(not(feature = "rayon"))]
-        let results = sharc
+        let results: Vec<Result<(String, Vec<u8>), (String, String, SharcEntry)>> = sharc
             .entries
             .iter()
             .map(|entry| {
                 let mut local_reader = std::io::Cursor::new(&data);
-                let extracted_data = sharc
+                sharc
                     .entry_data(&mut local_reader, entry)
-                    .expect("Failed to process entry");
-
-                (entry.name_hash.to_string(), extracted_data)
+                    .map(|extracted_data| (entry.name_hash.to_string(), extracted_data))
+                    .map_err(|e| (entry.name_hash.to_string(), e.to_string(), *entry))
             })
-            .collect::<Vec<_>>();
+            .collect();
 
         #[cfg(feature = "rayon")]
-        let results: Vec<(String, Vec<u8>)> = sharc
+        let results: Vec<Result<(String, Vec<u8>), (String, String, SharcEntry)>> = sharc
             .entries
             .par_iter()
             .map(|entry| {
                 // Each thread gets its own view of the data
                 let mut local_reader = std::io::Cursor::new(&data);
 
-                let extracted_data = sharc
+                sharc
                     .entry_data(&mut local_reader, entry)
-                    .expect("Failed to process entry");
-
-                (entry.name_hash.to_string(), extracted_data)
+                    .map(|extracted_data| (entry.name_hash.to_string(), extracted_data))
+                    .map_err(|e| (entry.name_hash.to_string(), e.to_string(), *entry))
             })
             .collect();
 
-        for (name_hash, extracted_data) in results {
+        let mut successes = Vec::new();
+        let mut failures = Vec::new();
+
+        for result in results {
+            match result {
+                Ok(s) => successes.push(s),
+                Err(f) => failures.push(f),
+            }
+        }
+
+        for (name_hash, extracted_data) in successes {
             let output_file = output.join(name_hash);
             std::fs::write(&output_file, extracted_data)
                 .map_err(|e| format!("failed to write output file {}: {e}", output_file.display()))
@@ -282,11 +294,55 @@ impl Sharc {
         std::fs::write(&time_path, time.to_be_bytes())
             .map_err(|e| format!("failed to write .time file: {e}"))?;
 
+        if !failures.is_empty() {
+            println!("\nFailed to extract {} entries:", failures.len());
+            for (hash, error, entry) in &failures {
+                println!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
+            }
+        }
+
         println!(
-            "Extracted {} files to {}",
-            sharc.entries.len(),
+            "\nExtracted {} files to {}",
+            sharc.entries.len() - failures.len(),
             output.display()
         );
+        Ok(())
+    }
+
+    pub fn inspect(input: &Path) -> Result<(), String> {
+        let data = std::fs::read(input).map_err(|e| format!("failed to read input file: {e}"))?;
+        let data_len = data.len() as u32;
+
+        let mut magic = [0u8; 4];
+        magic.clone_from_slice(&data[0..4]);
+
+        let mut reader = std::io::Cursor::new(&data);
+        let endian: Endian = magic::magic_to_endianess(&magic).into();
+
+        let sharc = match endian {
+            Endian::Little => {
+                SharcArchive::read_le_args(&mut reader, (SHARC_DEFAULT_KEY, data_len))
+            }
+            Endian::Big => SharcArchive::read_be_args(&mut reader, (SHARC_DEFAULT_KEY, data_len)),
+        }
+        .map_err(|e| format!("failed to read SHARC archive: {e}"))?;
+
+        let header = sharc.archive_data;
+        println!("Archive Type: SHARC");
+        println!("Timestamp: {}", header.timestamp);
+        println!("Entry Count: {}", sharc.entries.len());
+        println!("\nEntries:");
+        for entry in &sharc.entries {
+            println!(
+                "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}, Compression Type: {:#?}",
+                entry.name_hash,
+                entry.location.0,
+                entry.uncompressed_size,
+                entry.compressed_size,
+                entry.location.1
+            );
+        }
+
         Ok(())
     }
 }

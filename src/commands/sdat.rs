@@ -6,8 +6,8 @@ use clap::Subcommand;
 use rand::RngExt;
 
 use hdk_archive::{
-    bar::structs::BarArchive,
-    sharc::{builder::SharcBuilder, structs::SharcArchive},
+    bar::structs::{BarArchive, BarEntry},
+    sharc::{builder::SharcBuilder, structs::{SharcArchive, SharcEntry}},
     structs::{ArchiveFlags, ArchiveFlagsValue, CompressionType, Endianness},
 };
 
@@ -290,54 +290,50 @@ impl Sdat {
             common::create_output_dir(output)?;
 
             #[cfg(not(feature = "rayon"))]
-            let results: Vec<(String, Vec<u8>)> = sharc
+            let results: Vec<Result<(String, Vec<u8>), (String, String, SharcEntry)>> = sharc
                 .entries
                 .iter()
                 .map(|entry| {
                     let mut local_reader = std::io::Cursor::new(&shared[..]);
-                    let data = sharc
+                    sharc
                         .entry_data(&mut local_reader, entry)
-                        .expect("Failed to process entry");
-
-                    (entry.name_hash.to_string(), data)
+                        .map(|data| (entry.name_hash.to_string(), data))
+                        .map_err(|e| (entry.name_hash.to_string(), e.to_string(), *entry))
                 })
                 .collect();
 
             #[cfg(feature = "rayon")]
-            let results: Vec<(String, Vec<u8>)> = sharc
+            let results: Vec<Result<(String, Vec<u8>), (String, String, SharcEntry)>> = sharc
                 .entries
                 .par_iter()
                 .map(|entry| {
                     let mut local_reader = std::io::Cursor::new(&shared[..]);
-                    let extracted_data = sharc
+                    sharc
                         .entry_data(&mut local_reader, entry)
-                        .expect("Failed to process entry");
-
-                    (entry.name_hash.to_string(), extracted_data)
+                        .map(|extracted_data| (entry.name_hash.to_string(), extracted_data))
+                        .map_err(|e| (entry.name_hash.to_string(), e.to_string(), *entry))
                 })
                 .collect();
 
-            #[cfg(not(feature = "rayon"))]
-            {
-                for (rel, data) in results {
-                    let output_path = output.join(rel);
-                    std::fs::write(&output_path, &data).map_err(|e| {
-                        format!(
-                            "failed to write output file {}: {e}",
-                            &output_path.display()
-                        )
-                    })?;
+            let mut successes = Vec::new();
+            let mut failures = Vec::new();
+
+            for result in results {
+                match result {
+                    Ok(s) => successes.push(s),
+                    Err(f) => failures.push(f),
                 }
             }
 
-            #[cfg(feature = "rayon")]
-            results
-                .into_par_iter()
-                .try_for_each(|(rel, data)| {
-                    let output_path = output.join(rel);
-                    std::fs::write(output_path, &data)
-                })
-                .map_err(|e| e.to_string())?;
+            for (rel, data) in successes {
+                let output_path = output.join(rel);
+                std::fs::write(&output_path, &data).map_err(|e| {
+                    format!(
+                        "failed to write output file {}: {e}",
+                        &output_path.display()
+                    )
+                })?;
+            }
 
             let time = sharc.archive_data.timestamp;
             let time_path = output.join(".time");
@@ -345,9 +341,16 @@ impl Sdat {
             std::fs::write(&time_path, time.to_be_bytes())
                 .map_err(|e| format!("failed to write .time file: {e}"))?;
 
+            if !failures.is_empty() {
+                println!("\nFailed to extract {} entries:", failures.len());
+                for (hash, error, entry) in &failures {
+                    println!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
+                }
+            }
+
             println!(
-                "Extracted {} files to {}",
-                sharc.entries.len(),
+                "\nExtracted {} files to {}",
+                sharc.entries.len() - failures.len(),
                 output.display()
             );
             return Ok(());
@@ -377,67 +380,62 @@ impl Sdat {
             common::create_output_dir(output)?;
 
             #[cfg(not(feature = "rayon"))]
-            {
-                for entry in &bar.entries {
+            let results: Vec<Result<(String, Vec<u8>), (String, String, BarEntry)>> = bar
+                .entries
+                .iter()
+                .map(|entry| {
                     let mut local_reader = std::io::Cursor::new(&shared[..]);
-                    let data = bar
-                        .entry_data(
-                            &mut local_reader,
-                            entry,
-                            &crate::keys::BAR_DEFAULT_KEY,
-                            &crate::keys::BAR_SIGNATURE_KEY,
-                        )
-                        .map_err(|e| format!("failed to read BAR entry data: {e}"))?;
+                    bar.entry_data(
+                        &mut local_reader,
+                        entry,
+                        &crate::keys::BAR_DEFAULT_KEY,
+                        &crate::keys::BAR_SIGNATURE_KEY,
+                    )
+                    .map(|data| (entry.name_hash.to_string(), data))
+                    .map_err(|e| (entry.name_hash.to_string(), e.to_string(), *entry))
+                })
+                .collect();
 
-                    let rel_path = entry.name_hash.to_string();
-                    let output_path = output.join(rel_path);
+            #[cfg(feature = "rayon")]
+            let results: Vec<Result<(String, Vec<u8>), (String, String, BarEntry)>> = bar
+                .entries
+                .par_iter()
+                .map(|entry| {
+                    let local = shared.clone();
+                    let mut local_reader = std::io::Cursor::new(&local[..]);
+                    bar.entry_data(
+                        &mut local_reader,
+                        entry,
+                        &crate::keys::BAR_DEFAULT_KEY,
+                        &crate::keys::BAR_SIGNATURE_KEY,
+                    )
+                    .map(|extracted_data| (entry.name_hash.to_string(), extracted_data))
+                    .map_err(|e| (entry.name_hash.to_string(), e.to_string(), *entry))
+                })
+                .collect();
 
-                    let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
-                        format!(
-                            "failed to create output file {}: {e}",
-                            output_path.display()
-                        )
-                    })?;
+            let mut successes = Vec::new();
+            let mut failures = Vec::new();
 
-                    std::io::copy(&mut &data[..], &mut output_file).map_err(|e| {
-                        format!("failed to write output file {}: {e}", output_path.display())
-                    })?;
+            for result in results {
+                match result {
+                    Ok(s) => successes.push(s),
+                    Err(f) => failures.push(f),
                 }
             }
 
-            #[cfg(feature = "rayon")]
-            {
-                let results: Vec<(String, Vec<u8>)> = bar
-                    .entries
-                    .par_iter()
-                    .map(|entry| {
-                        let local = shared.clone();
-                        let mut local_reader = std::io::Cursor::new(&local[..]);
-                        let extracted_data = bar
-                            .entry_data(
-                                &mut local_reader,
-                                entry,
-                                &crate::keys::BAR_DEFAULT_KEY,
-                                &crate::keys::BAR_SIGNATURE_KEY,
-                            )
-                            .expect("Failed to process entry");
-                        (entry.name_hash.to_string(), extracted_data)
-                    })
-                    .collect();
+            for (rel, data) in successes {
+                let output_path = output.join(rel);
+                let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
+                    format!(
+                        "failed to create output file {}: {e}",
+                        output_path.display()
+                    )
+                })?;
 
-                for (rel, data) in results {
-                    let output_path = output.join(rel);
-                    let mut output_file = std::fs::File::create(&output_path).map_err(|e| {
-                        format!(
-                            "failed to create output file {}: {e}",
-                            output_path.display()
-                        )
-                    })?;
-
-                    std::io::copy(&mut &data[..], &mut output_file).map_err(|e| {
-                        format!("failed to write output file {}: {e}", output_path.display())
-                    })?;
-                }
+                std::io::copy(&mut &data[..], &mut output_file).map_err(|e| {
+                    format!("failed to write output file {}: {e}", output_path.display())
+                })?;
             }
 
             let time = bar.archive_data.timestamp;
@@ -446,9 +444,16 @@ impl Sdat {
             std::fs::write(&time_path, time.to_be_bytes())
                 .map_err(|e| format!("failed to write .time file: {e}"))?;
 
+            if !failures.is_empty() {
+                println!("\nFailed to extract {} entries:", failures.len());
+                for (hash, error, entry) in &failures {
+                    println!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
+                }
+            }
+
             println!(
-                "Extracted {} files to {}",
-                bar.entries.len(),
+                "\nExtracted {} files to {}",
+                bar.entries.len() - failures.len(),
                 output.display()
             );
 
