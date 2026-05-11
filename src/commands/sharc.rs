@@ -13,7 +13,7 @@ use hdk_archive::{
 };
 
 use crate::{
-    commands::{CompressedFile, EndianArg, Execute, IArg, IOArgs, common},
+    commands::{ArchiveEntryResult, CompressedFile, EndianArg, Execute, IArg, IOArgs, common},
     keys::{SHARC_DEFAULT_KEY, SHARC_FILES_KEY},
     magic,
 };
@@ -243,7 +243,7 @@ impl Sharc {
         common::create_output_dir(output)?;
 
         #[cfg(not(feature = "rayon"))]
-        let results: Vec<Result<(String, Vec<u8>), (String, String, SharcEntry)>> = sharc
+        let results: Vec<ArchiveEntryResult<SharcEntry>> = sharc
             .entries
             .iter()
             .map(|entry| {
@@ -256,7 +256,7 @@ impl Sharc {
             .collect();
 
         #[cfg(feature = "rayon")]
-        let results: Vec<Result<(String, Vec<u8>), (String, String, SharcEntry)>> = sharc
+        let results: Vec<ArchiveEntryResult<SharcEntry>> = sharc
             .entries
             .par_iter()
             .map(|entry| {

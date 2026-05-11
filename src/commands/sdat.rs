@@ -12,7 +12,7 @@ use hdk_archive::{
 };
 
 use crate::{
-    commands::{ArchiveType, CompressedFile, EndianArg, Execute, IArg, IOArgs, common},
+    commands::{ArchiveEntryResult, ArchiveType, CompressedFile, EndianArg, Execute, IArg, IOArgs, common},
     keys::{SHARC_FILES_KEY, SHARC_SDAT_KEY},
     magic,
 };
@@ -290,7 +290,7 @@ impl Sdat {
             common::create_output_dir(output)?;
 
             #[cfg(not(feature = "rayon"))]
-            let results: Vec<Result<(String, Vec<u8>), (String, String, SharcEntry)>> = sharc
+            let results: Vec<ArchiveEntryResult<SharcEntry>> = sharc
                 .entries
                 .iter()
                 .map(|entry| {
@@ -303,7 +303,7 @@ impl Sdat {
                 .collect();
 
             #[cfg(feature = "rayon")]
-            let results: Vec<Result<(String, Vec<u8>), (String, String, SharcEntry)>> = sharc
+            let results: Vec<ArchiveEntryResult<SharcEntry>> = sharc
                 .entries
                 .par_iter()
                 .map(|entry| {
@@ -330,7 +330,7 @@ impl Sdat {
                 std::fs::write(&output_path, &data).map_err(|e| {
                     format!(
                         "failed to write output file {}: {e}",
-                        &output_path.display()
+                        output_path.display()
                     )
                 })?;
             }
@@ -379,8 +379,10 @@ impl Sdat {
         } {
             common::create_output_dir(output)?;
 
+            type BarExtractionResult = Result<(String, Vec<u8>), (String, String, BarEntry)>;
+
             #[cfg(not(feature = "rayon"))]
-            let results: Vec<Result<(String, Vec<u8>), (String, String, BarEntry)>> = bar
+            let results: Vec<BarExtractionResult> = bar
                 .entries
                 .iter()
                 .map(|entry| {
@@ -397,7 +399,7 @@ impl Sdat {
                 .collect();
 
             #[cfg(feature = "rayon")]
-            let results: Vec<Result<(String, Vec<u8>), (String, String, BarEntry)>> = bar
+            let results: Vec<BarExtractionResult> = bar
                 .entries
                 .par_iter()
                 .map(|entry| {
