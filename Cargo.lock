@@ -898,7 +898,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 [[package]]
 name = "hdk-archive"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#3eaac71996bc3311938997b72053c4c08a8529cb"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#8d8c842efde8e508fc9237a224c1d6a161cb5c45"
 dependencies = [
  "aes",
  "binrw",
@@ -945,7 +945,7 @@ dependencies = [
 [[package]]
 name = "hdk-comp"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#3eaac71996bc3311938997b72053c4c08a8529cb"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#8d8c842efde8e508fc9237a224c1d6a161cb5c45"
 dependencies = [
  "byteorder",
  "flate2",
@@ -957,7 +957,7 @@ dependencies = [
 [[package]]
 name = "hdk-firmware"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#3eaac71996bc3311938997b72053c4c08a8529cb"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#8d8c842efde8e508fc9237a224c1d6a161cb5c45"
 dependencies = [
  "aes",
  "byteorder",
@@ -974,7 +974,7 @@ dependencies = [
 [[package]]
 name = "hdk-sdat"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#3eaac71996bc3311938997b72053c4c08a8529cb"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#8d8c842efde8e508fc9237a224c1d6a161cb5c45"
 dependencies = [
  "aes",
  "binrw",
@@ -988,7 +988,7 @@ dependencies = [
 [[package]]
 name = "hdk-secure"
 version = "0.1.0"
-source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#3eaac71996bc3311938997b72053c4c08a8529cb"
+source = "git+https://github.com/ZephyrCodesStuff/hdk-rs?branch=main#8d8c842efde8e508fc9237a224c1d6a161cb5c45"
 dependencies = [
  "binrw",
  "byteorder",
