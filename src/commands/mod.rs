@@ -16,6 +16,7 @@ pub mod compress;
 pub mod crypt;
 pub mod map;
 pub mod pkg;
+pub mod profanity;
 pub mod sdat;
 pub mod sharc;
 
@@ -52,6 +53,10 @@ pub enum Command {
     /// BAR file operations
     #[command(subcommand)]
     Bar(Bar),
+
+    /// Profanity Dictionary (.bin) operations
+    #[command(subcommand)]
+    Profanity(profanity::Profanity),
 
     /// Cryptographic operations
     #[command(subcommand)]
