@@ -33,4 +33,5 @@ jobs:
 
       - name: Run cargo clippy (deny warnings + nursery)
         run: |
-          cargo clippy --all-targets --features rayon,memmap2 -- -D warnings -D clippy::nursery
+          cargo clippy --all-targets --features mcp,rayon,memmap2 -- -D warnings -D clippy::nursery
+

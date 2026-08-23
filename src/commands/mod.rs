@@ -15,6 +15,8 @@ pub mod common;
 pub mod compress;
 pub mod crypt;
 pub mod map;
+#[cfg(feature = "mcp")]
+pub mod mcp;
 pub mod pkg;
 pub mod profanity;
 pub mod sdat;
@@ -73,7 +75,21 @@ pub enum Command {
     /// PKG file operations
     #[command(subcommand)]
     Pkg(pkg::Pkg),
+
+    /// Start the Model Context Protocol (MCP) server for AI assistants
+    #[cfg(feature = "mcp")]
+    #[command()]
+    Mcp(mcp::McpArgs),
 }
+
+#[cfg(feature = "mcp")]
+impl Execute for mcp::McpArgs {
+    fn execute(self) {
+        let rt = tokio::runtime::Runtime::new().expect("Failed to initialize Tokio runtime");
+        rt.block_on(mcp::run(self));
+    }
+}
+
 
 #[derive(Args, Debug)]
 pub struct Input {

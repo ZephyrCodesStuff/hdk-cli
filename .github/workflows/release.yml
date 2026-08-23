@@ -47,7 +47,8 @@ jobs:
       - name: Build release (Windows and macOS, no ISA-L support)
         if: matrix.os != 'ubuntu-latest'
         shell: bash
-        run: cargo build --release --target ${{ matrix.target }} --features rayon,memmap2
+        run: cargo build --release --target ${{ matrix.target }} --features mcp,rayon,memmap2
+
 
       - name: Build release (Linux, ISA-L support)
         if: matrix.os == 'ubuntu-latest'

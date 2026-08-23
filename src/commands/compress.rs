@@ -72,7 +72,7 @@ impl Execute for Compress {
     }
 }
 
-fn compress(input: &Path, output: &Path, algorithm: Algorithm) -> Result<(), String> {
+pub fn compress(input: &Path, output: &Path, algorithm: Algorithm) -> Result<(), String> {
     let input_file = File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
     let mut reader = BufReader::new(input_file);
 
@@ -94,7 +94,8 @@ fn compress(input: &Path, output: &Path, algorithm: Algorithm) -> Result<(), Str
     Ok(())
 }
 
-fn decompress(input: &Path, output: &Path, algorithm: Algorithm) -> Result<(), String> {
+pub fn decompress(input: &Path, output: &Path, algorithm: Algorithm) -> Result<(), String> {
+
     let input_file = File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
     let reader = BufReader::new(input_file);
 
