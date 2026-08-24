@@ -25,7 +25,9 @@ impl Execute for Profanity {
         let result = match self {
             Self::Extract(args) => Self::extract(&args.input, &args.output),
             Self::Build(args) => Self::build(&args.input, &args.output),
-            Self::Inspect(args) => Self::inspect(&args.input),
+            Self::Inspect(args) => Self::inspect(&args.input).map(|info| {
+                eprintln!("{info}");
+            }),
         };
 
         if let Err(e) = result {
@@ -37,7 +39,7 @@ impl Execute for Profanity {
 impl Profanity {
     /// Extract a .bin dictionary to .json
     pub fn extract(input: &Path, output: &Path) -> Result<(), String> {
-        println!(
+        eprintln!(
             "Extracting profanity dictionary: {} -> {}",
             input.display(),
             output.display()
@@ -63,18 +65,18 @@ impl Profanity {
             .filter(|i| !i.whitelist.is_empty())
             .count();
 
-        println!("Successfully extracted profanity dictionary:");
-        println!("  Version: {}", dict.version);
-        println!("  Flags: 0x{:02X}", dict.flags);
-        println!(
+        eprintln!("Successfully extracted profanity dictionary:");
+        eprintln!("  Version: {}", dict.version);
+        eprintln!("  Flags: 0x{:02X}", dict.flags);
+        eprintln!(
             "  Blacklisted Words: {} ({} have whitelist exceptions)",
             dict.dictionary_items.len(),
             num_with_whitelist
         );
-        println!("  Conversion Items: {}", dict.convert_items.len());
-        println!("  Custom Punctuation: {}", dict.custom_punctuation.len());
-        println!("  Char Substitutions: {}", dict.char_substitutions.len());
-        println!(
+        eprintln!("  Conversion Items: {}", dict.convert_items.len());
+        eprintln!("  Custom Punctuation: {}", dict.custom_punctuation.len());
+        eprintln!("  Char Substitutions: {}", dict.char_substitutions.len());
+        eprintln!(
             "  Rev Char Substitutions: {}",
             dict.rev_char_substitutions.len()
         );
@@ -84,7 +86,7 @@ impl Profanity {
 
     /// Build a .json dictionary to .bin
     pub fn build(input: &Path, output: &Path) -> Result<(), String> {
-        println!(
+        eprintln!(
             "Building profanity dictionary: {} -> {}",
             input.display(),
             output.display()
@@ -108,12 +110,12 @@ impl Profanity {
         fs::write(output, &bin_bytes)
             .map_err(|e| format!("failed to write output binary file: {e}"))?;
 
-        println!("Successfully built profanity dictionary:");
-        println!("  Output: {} ({} bytes)", output.display(), bin_bytes.len());
-        println!("  Blacklisted Words: {}", dict.dictionary_items.len());
-        println!("  Conversion Items: {}", dict.convert_items.len());
-        println!("  Char Substitutions: {}", dict.char_substitutions.len());
-        println!(
+        eprintln!("Successfully built profanity dictionary:");
+        eprintln!("  Output: {} ({} bytes)", output.display(), bin_bytes.len());
+        eprintln!("  Blacklisted Words: {}", dict.dictionary_items.len());
+        eprintln!("  Conversion Items: {}", dict.convert_items.len());
+        eprintln!("  Char Substitutions: {}", dict.char_substitutions.len());
+        eprintln!(
             "  Rev Char Substitutions: {}",
             dict.rev_char_substitutions.len()
         );
@@ -122,7 +124,9 @@ impl Profanity {
     }
 
     /// Inspect a .bin or .json dictionary
-    pub fn inspect(input: &Path) -> Result<(), String> {
+    pub fn inspect(input: &Path) -> Result<String, String> {
+        use std::fmt::Write;
+
         let dict = if input.extension().is_some_and(|ext| ext == "json") {
             let json_str =
                 fs::read_to_string(input).map_err(|e| format!("failed to read JSON file: {e}"))?;
@@ -133,16 +137,18 @@ impl Profanity {
                 .map_err(|e| format!("failed to read and decrypt profanity dictionary: {e}"))?
         };
 
-        println!("============================================================");
-        println!(" PlayStation Home Profanity Dictionary Info");
-        println!(" File: {}", input.display());
-        println!("============================================================");
-        println!(" Version: {}", dict.version);
-        println!(" Flags:   0x{:08X}", dict.flags);
-        println!("------------------------------------------------------------");
-        println!(" [Blacklisted Words: {}]", dict.dictionary_items.len());
+        let mut out = String::new();
+        let _ = writeln!(out, "============================================================");
+        let _ = writeln!(out, " PlayStation Home Profanity Dictionary Info");
+        let _ = writeln!(out, " File: {}", input.display());
+        let _ = writeln!(out, "============================================================");
+        let _ = writeln!(out, " Version: {}", dict.version);
+        let _ = writeln!(out, " Flags:   0x{:08X}", dict.flags);
+        let _ = writeln!(out, "------------------------------------------------------------");
+        let _ = writeln!(out, " [Blacklisted Words: {}]", dict.dictionary_items.len());
 
-        println!(
+        let _ = writeln!(
+            out,
             " Words with Whitelist Exceptions: {}",
             dict.dictionary_items
                 .iter()
@@ -150,12 +156,13 @@ impl Profanity {
                 .count()
         );
 
-        println!("\n Sample Blacklisted Words (first 10):");
+        let _ = writeln!(out, "\n Sample Blacklisted Words (first 10):");
         for (idx, item) in dict.dictionary_items.iter().take(10).enumerate() {
             if item.whitelist.is_empty() {
-                println!("   {:2}. \"{}\"", idx + 1, item.word);
+                let _ = writeln!(out, "   {:2}. \"{}\"", idx + 1, item.word);
             } else {
-                println!(
+                let _ = writeln!(
+                    out,
                     "   {:2}. \"{}\" (whitelist: {})",
                     idx + 1,
                     item.word,
@@ -164,11 +171,12 @@ impl Profanity {
             }
         }
 
-        println!("\n [Conversion Rules: {}]", dict.convert_items.len());
+        let _ = writeln!(out, "\n [Conversion Rules: {}]", dict.convert_items.len());
         for (idx, item) in dict.convert_items.iter().take(5).enumerate() {
             let from_ch = char::from_u32(item.from).unwrap_or('?');
             let to_ch = char::from_u32(item.to).unwrap_or('?');
-            println!(
+            let _ = writeln!(
+                out,
                 "   {:2}. U+{:04X} ('{}') -> U+{:04X} ('{}')",
                 idx + 1,
                 item.from,
@@ -178,10 +186,11 @@ impl Profanity {
             );
         }
         if dict.convert_items.len() > 5 {
-            println!("   ... ({} more rules)", dict.convert_items.len() - 5);
+            let _ = writeln!(out, "   ... ({} more rules)", dict.convert_items.len() - 5);
         }
 
-        println!(
+        let _ = writeln!(
+            out,
             "\n [Custom Punctuation Codepoints: {}]",
             dict.custom_punctuation.len()
         );
@@ -194,15 +203,17 @@ impl Profanity {
                 format!("'{}' (0x{:02X})", ch, p)
             })
             .collect();
-        println!("   {}", punct_preview.join(", "));
+        let _ = writeln!(out, "   {}", punct_preview.join(", "));
         if dict.custom_punctuation.len() > 15 {
-            println!(
+            let _ = writeln!(
+                out,
                 "   ... ({} more codepoints)",
                 dict.custom_punctuation.len() - 15
             );
         }
 
-        println!(
+        let _ = writeln!(
+            out,
             "\n [Forward Character Substitutions: {}]",
             dict.char_substitutions.len()
         );
@@ -214,16 +225,18 @@ impl Profanity {
                 .map(|s| format!("\"{}\"", s))
                 .collect::<Vec<_>>()
                 .join(", ");
-            println!("   {:2}. '{}' -> [{}]", idx + 1, target_ch, variants);
+            let _ = writeln!(out, "   {:2}. '{}' -> [{}]", idx + 1, target_ch, variants);
         }
         if dict.char_substitutions.len() > 5 {
-            println!(
+            let _ = writeln!(
+                out,
                 "   ... ({} more mappings)",
                 dict.char_substitutions.len() - 5
             );
         }
 
-        println!(
+        let _ = writeln!(
+            out,
             "\n [Reverse Character Substitutions: {}]",
             dict.rev_char_substitutions.len()
         );
@@ -235,7 +248,8 @@ impl Profanity {
                 .map(|&c| format!("'{}'", char::from_u32(c as u32).unwrap_or('?')))
                 .collect::<Vec<_>>()
                 .join(", ");
-            println!(
+            let _ = writeln!(
+                out,
                 "   {:2}. '{}' (0x{:04X}) -> [{}]",
                 idx + 1,
                 symbol_ch,
@@ -244,14 +258,15 @@ impl Profanity {
             );
         }
         if dict.rev_char_substitutions.len() > 5 {
-            println!(
+            let _ = writeln!(
+                out,
                 "   ... ({} more mappings)",
                 dict.rev_char_substitutions.len() - 5
             );
         }
 
-        println!("============================================================");
+        let _ = writeln!(out, "============================================================");
 
-        Ok(())
+        Ok(out)
     }
 }

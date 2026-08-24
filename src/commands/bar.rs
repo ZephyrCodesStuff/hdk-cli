@@ -30,7 +30,9 @@ impl Execute for Bar {
         let result = match self {
             Self::Create(args) => Self::create(&args.input, &args.output),
             Self::Extract(args) => Self::extract(&args.input, &args.output),
-            Self::Inspect(args) => Self::inspect(&args.input),
+            Self::Inspect(args) => Self::inspect(&args.input).map(|info| {
+                eprintln!("{info}");
+            }),
         };
 
         if let Err(e) = result {
@@ -64,9 +66,9 @@ impl Bar {
                     time_bytes[3],
                 ]);
                 archive_writer = archive_writer.with_timestamp(timestamp);
-                println!("Using timestamp from .time file: {}", timestamp);
+                eprintln!("Using timestamp from .time file: {}", timestamp);
             } else {
-                println!(
+                eprintln!(
                     "Warning: .time file has invalid length, using default timestamp (system time)."
                 );
             }
@@ -82,7 +84,7 @@ impl Bar {
             let data = common::read_file_bytes(&abs_path)
                 .map_err(|e| format!("failed to read file {}: {e}", abs_path.display()))?;
 
-            println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
+            eprintln!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
             archive_writer.add_entry(
                 name_hash,
@@ -103,7 +105,7 @@ impl Bar {
         std::io::copy(&mut buf.as_slice(), &mut &output_file)
             .map_err(|e| format!("failed to write archive: {e}"))?;
 
-        println!("Created BAR archive: {}", output.display());
+        eprintln!("Created BAR archive: {}", output.display());
         Ok(())
     }
 
@@ -169,13 +171,13 @@ impl Bar {
             .map_err(|e| format!("failed to write .time file: {e}"))?;
 
         if !failures.is_empty() {
-            println!("\nFailed to extract {} entries:", failures.len());
+            eprintln!("\nFailed to extract {} entries:", failures.len());
             for (hash, error, entry) in &failures {
-                println!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
+                eprintln!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
             }
         }
 
-        println!(
+        eprintln!(
             "\nExtracted {} files to {}",
             success_count,
             output.display()
@@ -183,7 +185,9 @@ impl Bar {
         Ok(())
     }
 
-    pub fn inspect(input: &Path) -> Result<(), String> {
+    pub fn inspect(input: &Path) -> Result<String, String> {
+        use std::fmt::Write;
+
         let data = common::read_file_bytes(input)
             .map_err(|e| format!("failed to read archive file {}: {e}", input.display()))?;
 
@@ -209,12 +213,14 @@ impl Bar {
         .map_err(|e| format!("failed to open BAR archive: {e}"))?;
 
         let header = archive.archive_data;
-        println!("Archive Type: BAR");
-        println!("Timestamp: {}", header.timestamp);
-        println!("Entry Count: {}", archive.entries.len());
-        println!("\nEntries:");
+        let mut out = String::new();
+        let _ = writeln!(out, "Archive Type: BAR");
+        let _ = writeln!(out, "Timestamp: {}", header.timestamp);
+        let _ = writeln!(out, "Entry Count: {}", archive.entries.len());
+        let _ = writeln!(out, "\nEntries:");
         for entry in &archive.entries {
-            println!(
+            let _ = writeln!(
+                out,
                 "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}, Compression Type: {:#?}",
                 entry.name_hash,
                 entry.location.0,
@@ -224,6 +230,6 @@ impl Bar {
             );
         }
 
-        Ok(())
+        Ok(out)
     }
 }

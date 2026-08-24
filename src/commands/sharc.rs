@@ -60,7 +60,9 @@ impl Execute for Sharc {
                 protect,
             } => Self::create(&input, &output, endian, protect),
             Self::Extract(args) => Self::extract(&args.input, &args.output),
-            Self::Inspect(args) => Self::inspect(&args.input),
+            Self::Inspect(args) => Self::inspect(&args.input).map(|info| {
+                eprintln!("{info}");
+            }),
         };
 
         if let Err(e) = result {
@@ -104,9 +106,9 @@ impl Sharc {
                     time_bytes[3],
                 ]);
                 archive_writer = archive_writer.with_timestamp(timestamp);
-                println!("Using timestamp from .time file: {}", timestamp);
+                eprintln!("Using timestamp from .time file: {}", timestamp);
             } else {
-                println!(
+                eprintln!(
                     "Warning: .time file has invalid length, using default timestamp (system time)."
                 );
             }
@@ -182,7 +184,7 @@ impl Sharc {
             iv,
         } in compressed_data
         {
-            println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
+            eprintln!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
             archive_writer.add_compressed_entry(
                 name_hash,
@@ -202,7 +204,7 @@ impl Sharc {
             .flush()
             .map_err(|e| format!("failed to flush output file: {e}"))?;
 
-        println!("Created SHARC archive: {}", output.display());
+        eprintln!("Created SHARC archive: {}", output.display());
         Ok(())
     }
 
@@ -295,13 +297,13 @@ impl Sharc {
             .map_err(|e| format!("failed to write .time file: {e}"))?;
 
         if !failures.is_empty() {
-            println!("\nFailed to extract {} entries:", failures.len());
+            eprintln!("\nFailed to extract {} entries:", failures.len());
             for (hash, error, entry) in &failures {
-                println!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
+                eprintln!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
             }
         }
 
-        println!(
+        eprintln!(
             "\nExtracted {} files to {}",
             sharc.entries.len() - failures.len(),
             output.display()
@@ -309,7 +311,9 @@ impl Sharc {
         Ok(())
     }
 
-    pub fn inspect(input: &Path) -> Result<(), String> {
+    pub fn inspect(input: &Path) -> Result<String, String> {
+        use std::fmt::Write;
+
         let data = std::fs::read(input).map_err(|e| format!("failed to read input file: {e}"))?;
         let data_len = data.len() as u32;
 
@@ -328,12 +332,14 @@ impl Sharc {
         .map_err(|e| format!("failed to read SHARC archive: {e}"))?;
 
         let header = sharc.archive_data;
-        println!("Archive Type: SHARC");
-        println!("Timestamp: {}", header.timestamp);
-        println!("Entry Count: {}", sharc.entries.len());
-        println!("\nEntries:");
+        let mut out = String::new();
+        let _ = writeln!(out, "Archive Type: SHARC");
+        let _ = writeln!(out, "Timestamp: {}", header.timestamp);
+        let _ = writeln!(out, "Entry Count: {}", sharc.entries.len());
+        let _ = writeln!(out, "\nEntries:");
         for entry in &sharc.entries {
-            println!(
+            let _ = writeln!(
+                out,
                 "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}, Compression Type: {:#?}",
                 entry.name_hash,
                 entry.location.0,
@@ -343,6 +349,6 @@ impl Sharc {
             );
         }
 
-        Ok(())
+        Ok(out)
     }
 }

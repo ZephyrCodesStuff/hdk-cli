@@ -57,16 +57,16 @@ impl Execute for Map {
 
         mapper = mapper.with_output_folder(output_dir.clone());
 
-        println!("Mapping files to: {}", output_dir.display());
+        eprintln!("Mapping files to: {}", output_dir.display());
 
         let result = mapper.run();
 
-        println!("Mapped {} files.", result.mapped);
+        eprintln!("Mapped {} files.", result.mapped);
 
         if !result.not_found.is_empty() {
-            println!("{} files could not be mapped:", result.not_found.len());
+            eprintln!("{} files could not be mapped:", result.not_found.len());
             for file in result.not_found {
-                println!(" - {}", file.display());
+                eprintln!(" - {}", file.display());
             }
         }
     }

@@ -84,7 +84,7 @@ pub fn compress(input: &Path, output: &Path, algorithm: Algorithm) -> Result<(),
         Algorithm::Lzma => compress_lzma(&mut reader, writer)?,
     };
 
-    println!(
+    eprintln!(
         "Compressed {} -> {} ({} bytes, {:?})",
         input.display(),
         output.display(),
@@ -107,7 +107,7 @@ pub fn decompress(input: &Path, output: &Path, algorithm: Algorithm) -> Result<(
         Algorithm::Lzma => decompress_lzma(reader, &mut writer)?,
     };
 
-    println!(
+    eprintln!(
         "Decompressed {} -> {} ({} bytes, {:?})",
         input.display(),
         output.display(),

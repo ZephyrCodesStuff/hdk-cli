@@ -22,7 +22,9 @@ pub enum Pkg {
 impl Execute for Pkg {
     fn execute(self) {
         let function = match self {
-            Self::Inspect(args) => Self::inspect(&args.input),
+            Self::Inspect(args) => Self::inspect(&args.input).map(|info| {
+                eprintln!("{info}");
+            }),
             Self::Extract(args) => Self::extract(&args.input, &args.output),
             Self::Create(args) => Self::create(&args),
         };
@@ -34,19 +36,23 @@ impl Execute for Pkg {
 }
 
 impl Pkg {
-    pub fn inspect(input: &PathBuf) -> Result<(), String> {
+    pub fn inspect(input: &Path) -> Result<String, String> {
+        use std::fmt::Write;
+
         let file =
             std::fs::File::open(input).map_err(|e| format!("failed to open PKG file: {e}"))?;
 
         let mut pkg = hdk_firmware::pkg::reader::PkgArchive::open(file)
             .map_err(|e| format!("failed to read PKG file: {e}"))?;
 
-        println!("PKG header: {:#?}", pkg.header());
+        let mut out = String::new();
+        let _ = writeln!(out, "PKG header: {:#?}", pkg.header());
 
         // Print every metadata packet
-        println!("Metadata packets:");
+        let _ = writeln!(out, "Metadata packets:");
         for packet in &pkg.metadata().packets {
-            println!(
+            let _ = writeln!(
+                out,
                 "  ID: {:X}, size: {}, data (hex): {}",
                 packet.id,
                 packet.data.len(),
@@ -61,13 +67,14 @@ impl Pkg {
         }
 
         for item in pkg.items().filter_map(|item| item.ok()) {
-            println!(
+            let _ = writeln!(
+                out,
                 "{} ({:X}), size: {} bytes",
                 item.name, item.entry.flags, item.entry.data_size
             );
         }
 
-        Ok(())
+        Ok(out)
     }
 
     pub fn extract(input: &Path, output: &Path) -> Result<(), String> {
@@ -161,7 +168,7 @@ impl Pkg {
                     let data = std::fs::read(entry.path())
                         .map_err(|e| format!("failed to read {}: {e}", entry_pkg))?;
                     builder.add_file(&entry_pkg, data);
-                    println!("Added file: {}", entry_pkg);
+                    eprintln!("Added file: {}", entry_pkg);
                 }
             }
 
@@ -171,7 +178,7 @@ impl Pkg {
                     let entry_rel = rel_path.join(entry.file_name());
                     let entry_pkg = pkg_path_string(&entry_rel);
                     builder.add_directory(&entry_pkg);
-                    println!("Added dir: {}", entry_pkg);
+                    eprintln!("Added dir: {}", entry_pkg);
                     add_directory_recursive(builder, base_path, &entry_rel)?;
                 }
             }
@@ -189,7 +196,7 @@ impl Pkg {
             .write(&mut output_file)
             .map_err(|e| format!("failed to finalize PKG archive: {e}"))?;
 
-        println!("PKG archive created successfully: {}", output.display());
+        eprintln!("PKG archive created successfully: {}", output.display());
         Ok(())
     }
 }

@@ -224,7 +224,7 @@ impl HdkMcpServer {
                 }
             }
             "inspect" | "i" => match Sdat::inspect(&input_path) {
-                Ok(()) => Ok(mcp_success(format!("SDAT archive inspection completed for '{}'", input_path.display()))),
+                Ok(info) => Ok(mcp_success(info)),
                 Err(e) => Ok(mcp_error(format!("Failed to inspect SDAT: {e}"))),
             },
             other => Ok(mcp_error(format!("Unknown action '{other}'. Supported: create, extract, inspect"))),
@@ -257,7 +257,7 @@ impl HdkMcpServer {
                 }
             }
             "inspect" | "i" => match Sharc::inspect(&input_path) {
-                Ok(()) => Ok(mcp_success(format!("SHARC archive inspection completed for '{}'", input_path.display()))),
+                Ok(info) => Ok(mcp_success(info)),
                 Err(e) => Ok(mcp_error(format!("Failed to inspect SHARC: {e}"))),
             },
             other => Ok(mcp_error(format!("Unknown action '{other}'. Supported: create, extract, inspect"))),
@@ -287,7 +287,7 @@ impl HdkMcpServer {
                 }
             }
             "inspect" | "i" => match Bar::inspect(&input_path) {
-                Ok(()) => Ok(mcp_success(format!("BAR archive inspection completed for '{}'", input_path.display()))),
+                Ok(info) => Ok(mcp_success(info)),
                 Err(e) => Ok(mcp_error(format!("Failed to inspect BAR: {e}"))),
             },
             other => Ok(mcp_error(format!("Unknown action '{other}'. Supported: create, extract, inspect"))),
@@ -374,7 +374,7 @@ impl HdkMcpServer {
 
         match params.action.to_ascii_lowercase().as_str() {
             "inspect" | "i" => match Pkg::inspect(&input_path) {
-                Ok(()) => Ok(mcp_success(format!("PKG inspection completed for '{}'", input_path.display()))),
+                Ok(info) => Ok(mcp_success(info)),
                 Err(e) => Ok(mcp_error(format!("Failed to inspect PKG: {e}"))),
             },
             "extract" | "x" => {
@@ -430,7 +430,7 @@ impl HdkMcpServer {
                 }
             }
             "inspect" | "i" => match Profanity::inspect(&input_path) {
-                Ok(()) => Ok(mcp_success(format!("Profanity dictionary inspection completed for '{}'", input_path.display()))),
+                Ok(info) => Ok(mcp_success(info)),
                 Err(e) => Ok(mcp_error(format!("Failed to inspect profanity dictionary: {e}"))),
             },
             other => Ok(mcp_error(format!("Unknown action '{other}'. Supported: extract, build, inspect"))),

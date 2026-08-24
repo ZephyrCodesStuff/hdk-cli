@@ -328,7 +328,7 @@ pub fn encrypt_file(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
     let digest = hasher.digest().bytes();
 
     let iv: [u8; 8] = digest[..8].try_into().unwrap();
-    println!("IV (from SHA-1): {:02x?}", iv);
+    eprintln!("IV (from SHA-1): {:02x?}", iv);
 
     let cipher = BlowfishPS3::new(&crate::keys::BLOWFISH_DEFAULT_KEY.into(), &iv.into());
     let mut cursor = std::io::Cursor::new(data.as_slice());
@@ -342,7 +342,7 @@ pub fn encrypt_file(input: &PathBuf, output: &PathBuf) -> Result<(), String> {
     std::fs::write(output, &encrypted)
         .map_err(|e| format!("Failed to write encrypted file: {e}"))?;
 
-    println!("Encrypted → {}", output.display());
+    eprintln!("Encrypted → {}", output.display());
     Ok(())
 }
 
@@ -404,7 +404,7 @@ pub fn decrypt_file(
         // the file-size field), so skip entropy checking — HCDB bodies are EdgeLZMA-
         // compressed and will still read as high-entropy after decryption.
         let success = if verified_by_oracle {
-            println!(
+            eprintln!(
                 "Decrypted as {file_type:?} (validated by file-size oracle), IV: {:02x?}",
                 iv
             );
@@ -427,7 +427,7 @@ pub fn decrypt_file(
             );
 
             if drop >= ENTROPY_DROP_THRESHOLD {
-                println!(
+                eprintln!(
                     "Decrypted as {file_type:?} (entropy drop {drop:.3}), IV: {:02x?}",
                     iv
                 );
@@ -440,7 +440,7 @@ pub fn decrypt_file(
         if success {
             std::fs::write(output, &attempt)
                 .map_err(|e| format!("Failed to write decrypted file: {e}"))?;
-            println!("Decrypted → {}", output.display());
+            eprintln!("Decrypted → {}", output.display());
             return Ok(());
         }
         // Not a match — try the next candidate.
@@ -459,7 +459,7 @@ pub fn auto_crypt(input: &PathBuf, hint: Option<KnownFileType>) -> Result<(), St
 
     match status_heuristic(&data) {
         Heuristic::Decrypted(reason) => {
-            println!("File appears decrypted ({reason:?}) — encrypting…");
+            eprintln!("File appears decrypted ({reason:?}) — encrypting…");
             // Place output next to input with a `.enc` extension.
             let output = input.with_extension(
                 format!(
@@ -471,7 +471,7 @@ pub fn auto_crypt(input: &PathBuf, hint: Option<KnownFileType>) -> Result<(), St
             encrypt_file(input, &output)
         }
         Heuristic::Encrypted(reason) => {
-            println!("File appears encrypted ({reason:?}) — decrypting…");
+            eprintln!("File appears encrypted ({reason:?}) — decrypting…");
             // Place output next to input with a `.dec` extension.
             let output = input.with_extension(
                 format!(

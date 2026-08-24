@@ -102,7 +102,7 @@ pub fn collect_input_files(input: &Path) -> Result<Vec<(PathBuf, PathBuf, AfsHas
 
         // If the filename is `.time`, ignore it.
         if entry.file_name() == ".time" {
-            println!("Skipping .time file: {}", entry.path().display());
+            eprintln!("Skipping .time file: {}", entry.path().display());
             continue;
         }
 

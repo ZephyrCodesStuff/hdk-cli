@@ -95,7 +95,9 @@ impl Execute for Sdat {
                 protect,
             } => Self::create(&input, &output, archive_type, endian, protect),
             Self::Extract(args) => Self::extract(&args.input, &args.output),
-            Self::Inspect(args) => Self::inspect(&args.input),
+            Self::Inspect(args) => Self::inspect(&args.input).map(|info| {
+                eprintln!("{info}");
+            }),
         };
 
         if let Err(e) = function {
@@ -138,9 +140,9 @@ impl Sdat {
                     time_bytes[3],
                 ]);
                 archive_writer = archive_writer.with_timestamp(timestamp);
-                println!("Using timestamp from .time file: {}", timestamp);
+                eprintln!("Using timestamp from .time file: {}", timestamp);
             } else {
-                println!(
+                eprintln!(
                     "Warning: .time file has invalid length, using default timestamp (system time)."
                 );
             }
@@ -216,7 +218,7 @@ impl Sdat {
             iv,
         } in compressed_data
         {
-            println!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
+            eprintln!("Adding file: {} (hash: {})", rel_path.display(), name_hash);
 
             archive_writer.add_compressed_entry(
                 name_hash,
@@ -254,7 +256,7 @@ impl Sdat {
         std::fs::write(output, &sdat_bytes)
             .map_err(|e| format!("failed to write output file: {e}"))?;
 
-        println!("Created SDAT archive: {}", output.display());
+        eprintln!("Created SDAT archive: {}", output.display());
         Ok(())
     }
 
@@ -342,13 +344,13 @@ impl Sdat {
                 .map_err(|e| format!("failed to write .time file: {e}"))?;
 
             if !failures.is_empty() {
-                println!("\nFailed to extract {} entries:", failures.len());
+                eprintln!("\nFailed to extract {} entries:", failures.len());
                 for (hash, error, entry) in &failures {
-                    println!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
+                    eprintln!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
                 }
             }
 
-            println!(
+            eprintln!(
                 "\nExtracted {} files to {}",
                 sharc.entries.len() - failures.len(),
                 output.display()
@@ -447,13 +449,13 @@ impl Sdat {
                 .map_err(|e| format!("failed to write .time file: {e}"))?;
 
             if !failures.is_empty() {
-                println!("\nFailed to extract {} entries:", failures.len());
+                eprintln!("\nFailed to extract {} entries:", failures.len());
                 for (hash, error, entry) in &failures {
-                    println!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
+                    eprintln!("  - {}: {}\n    Metadata: {:#?}", hash, error, entry);
                 }
             }
 
-            println!(
+            eprintln!(
                 "\nExtracted {} files to {}",
                 bar.entries.len() - failures.len(),
                 output.display()
@@ -465,7 +467,9 @@ impl Sdat {
         Err("file does not contain a supported SHARC or BAR archive".to_string())
     }
 
-    pub fn inspect(input: &Path) -> Result<(), String> {
+    pub fn inspect(input: &Path) -> Result<String, String> {
+        use std::fmt::Write;
+
         // Open and read the SDAT file
         let file =
             std::fs::File::open(input).map_err(|e| format!("failed to open input file: {e}"))?;
@@ -494,12 +498,14 @@ impl Sdat {
             ),
         } {
             let header = sharc.archive_data;
-            println!("Archive Type: SHARC");
-            println!("Timestamp: {}", header.timestamp);
-            println!("Entry Count: {}", sharc.entries.len());
-            println!("\nEntries:");
+            let mut out = String::new();
+            let _ = writeln!(out, "Archive Type: SHARC");
+            let _ = writeln!(out, "Timestamp: {}", header.timestamp);
+            let _ = writeln!(out, "Entry Count: {}", sharc.entries.len());
+            let _ = writeln!(out, "\nEntries:");
             for entry in &sharc.entries {
-                println!(
+                let _ = writeln!(
+                    out,
                     "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}",
                     entry.name_hash,
                     entry.location.0,
@@ -507,7 +513,7 @@ impl Sdat {
                     entry.compressed_size
                 );
             }
-            return Ok(());
+            return Ok(out);
         }
 
         // Try BAR
@@ -530,12 +536,14 @@ impl Sdat {
             ),
         } {
             let header = bar.archive_data;
-            println!("Archive Type: BAR");
-            println!("Timestamp: {}", header.timestamp);
-            println!("Entry Count: {}", bar.entries.len());
-            println!("\nEntries:");
+            let mut out = String::new();
+            let _ = writeln!(out, "Archive Type: BAR");
+            let _ = writeln!(out, "Timestamp: {}", header.timestamp);
+            let _ = writeln!(out, "Entry Count: {}", bar.entries.len());
+            let _ = writeln!(out, "\nEntries:");
             for entry in &bar.entries {
-                println!(
+                let _ = writeln!(
+                    out,
                     "  - Hash: {}, Offset: {}, Uncompressed Size: {}, Compressed Size: {}",
                     entry.name_hash,
                     entry.location.0,
@@ -543,7 +551,7 @@ impl Sdat {
                     entry.compressed_size
                 );
             }
-            return Ok(());
+            return Ok(out);
         }
 
         Err("file does not contain a supported SHARC or BAR archive".to_string())
