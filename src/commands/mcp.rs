@@ -17,6 +17,7 @@ use crate::commands::{
     crypt::{self, KnownFileType},
     pkg::{Pkg, PkgCreateArgs},
     profanity::Profanity,
+    sceneid,
     sdat::Sdat,
     sharc::Sharc,
     ArchiveType, EndianArg,
@@ -191,6 +192,24 @@ pub struct HdkProfanityParams {
     pub input: String,
     #[schemars(description = "Output file path (.json for extract, .bin for build)")]
     pub output: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct HdkSceneIdParams {
+    #[schemars(description = "Action to perform: 'generate', 'forge', 'verify', or 'decode' / 'inspect'")]
+    pub action: String,
+    #[schemars(description = "Single SceneID UUID string to verify or decode")]
+    pub id: Option<String>,
+    #[schemars(description = "List of SceneID UUID strings to verify or decode")]
+    pub ids: Option<Vec<String>>,
+    #[schemars(description = "Target SceneID number (u16 as decimal or hex string, e.g. '0x1337' or '4919') for forge/generate")]
+    pub target: Option<String>,
+    #[schemars(description = "Target CRC16 checksum (u16 as decimal or hex string, e.g. '0xABCD') for forge/generate")]
+    pub target_crc: Option<String>,
+    #[schemars(description = "Number of SceneIDs to generate or forge (default: 1)")]
+    pub count: Option<usize>,
+    #[schemars(description = "Include verbose breakdown in output (default: false)")]
+    pub verbose: Option<bool>,
 }
 
 // ── MCP Server Tool Router ───────────────────────────────────────────────────
@@ -434,6 +453,178 @@ impl HdkMcpServer {
                 Err(e) => Ok(mcp_error(format!("Failed to inspect profanity dictionary: {e}"))),
             },
             other => Ok(mcp_error(format!("Unknown action '{other}'. Supported: extract, build, inspect"))),
+        }
+    }
+
+    #[tool(description = "PlayStation Home SceneID operations: generate, forge, verify, and decode/inspect SceneIDs.")]
+    async fn hdk_sceneid(&self, Parameters(params): Parameters<HdkSceneIdParams>) -> Result<CallToolResult, rmcp::ErrorData> {
+        let count = params.count.unwrap_or(1);
+        let verbose = params.verbose.unwrap_or(false);
+
+        match params.action.to_ascii_lowercase().as_str() {
+            "generate" | "g" | "new" | "n" | "create" | "c" => {
+                let target = match params.target.as_deref() {
+                    Some(t) => match sceneid::parse_u16(t) {
+                        Ok(val) => Some(val),
+                        Err(e) => return Ok(mcp_error(format!("Failed to parse target: {e}"))),
+                    },
+                    None => None,
+                };
+                let crc = match params.target_crc.as_deref() {
+                    Some(c) => match sceneid::parse_u16(c) {
+                        Ok(val) => Some(val),
+                        Err(e) => return Ok(mcp_error(format!("Failed to parse target CRC: {e}"))),
+                    },
+                    None => None,
+                };
+
+                let results = sceneid::SceneId::generate_ids(count, target, crc);
+                let output = if verbose {
+                    results
+                        .iter()
+                        .enumerate()
+                        .map(|(i, d)| {
+                            if results.len() > 1 {
+                                format!("--- SceneID [{}/{}] ---\n{}", i + 1, results.len(), d.format_inspection())
+                            } else {
+                                d.format_inspection()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                } else {
+                    results
+                        .iter()
+                        .map(|d| format!("{} (Scene ID: 0x{:04X} / {}, CRC16: 0x{:04X})", d.uuid, d.extracted_id, d.extracted_id, d.given_crc16))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+
+                Ok(mcp_success(output))
+            }
+            "forge" | "f" => {
+                let target = match params.target.as_deref() {
+                    Some(t) => match sceneid::parse_u16(t) {
+                        Ok(val) => val,
+                        Err(e) => return Ok(mcp_error(format!("Failed to parse target: {e}"))),
+                    },
+                    None => return Ok(mcp_error("Target SceneID number is required for forge action (e.g. '0x1337' or '4919')")),
+                };
+                let crc = match params.target_crc.as_deref() {
+                    Some(c) => match sceneid::parse_u16(c) {
+                        Ok(val) => Some(val),
+                        Err(e) => return Ok(mcp_error(format!("Failed to parse target CRC: {e}"))),
+                    },
+                    None => None,
+                };
+
+                let results = sceneid::SceneId::generate_ids(count, Some(target), crc);
+                let output = if verbose {
+                    results
+                        .iter()
+                        .enumerate()
+                        .map(|(i, d)| {
+                            if results.len() > 1 {
+                                format!("--- Forged SceneID [{}/{}] ---\n{}", i + 1, results.len(), d.format_inspection())
+                            } else {
+                                d.format_inspection()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                } else {
+                    results
+                        .iter()
+                        .map(|d| format!("{} (Scene ID: 0x{:04X} / {}, CRC16: 0x{:04X})", d.uuid, d.extracted_id, d.extracted_id, d.given_crc16))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+
+                Ok(mcp_success(output))
+            }
+            "verify" | "v" | "check" => {
+                let mut ids = Vec::new();
+                if let Some(id) = params.id {
+                    ids.push(id);
+                }
+                if let Some(extra_ids) = params.ids {
+                    ids.extend(extra_ids);
+                }
+
+                if ids.is_empty() {
+                    return Ok(mcp_error("No SceneID UUID(s) provided. Specify 'id' or 'ids'."));
+                }
+
+                let mut out = Vec::new();
+                let mut all_valid = true;
+
+                for id_str in &ids {
+                    match sceneid::SceneIdDetails::from_str(id_str) {
+                        Ok(details) => {
+                            if details.is_valid {
+                                out.push(format!(
+                                    "✓ {}: VALID (Scene ID: 0x{:04X} / {}, CRC16: 0x{:04X})",
+                                    details.uuid, details.extracted_id, details.extracted_id, details.given_crc16
+                                ));
+                            } else {
+                                all_valid = false;
+                                out.push(format!(
+                                    "✗ {}: INVALID CRC16 (Given: 0x{:04X}, Expected: 0x{:04X}, Extracted Scene ID: 0x{:04X} / {})",
+                                    details.uuid, details.given_crc16, details.expected_crc16, details.extracted_id, details.extracted_id
+                                ));
+                            }
+                        }
+                        Err(e) => {
+                            all_valid = false;
+                            out.push(format!("✗ {id_str}: INVALID ({e})"));
+                        }
+                    }
+                }
+
+                if ids.len() > 1 {
+                    let valid_count = ids.len() - out.iter().filter(|s| s.starts_with('✗')).count();
+                    out.push(format!("\nSummary: {valid_count}/{} valid SceneIDs.", ids.len()));
+                }
+
+                if all_valid {
+                    Ok(mcp_success(out.join("\n")))
+                } else {
+                    Ok(mcp_error(out.join("\n")))
+                }
+            }
+            "decode" | "d" | "inspect" | "i" | "extract" | "x" => {
+                let mut ids = Vec::new();
+                if let Some(id) = params.id {
+                    ids.push(id);
+                }
+                if let Some(extra_ids) = params.ids {
+                    ids.extend(extra_ids);
+                }
+
+                if ids.is_empty() {
+                    return Ok(mcp_error("No SceneID UUID(s) provided. Specify 'id' or 'ids'."));
+                }
+
+                let mut out = Vec::new();
+                for (i, id_str) in ids.iter().enumerate() {
+                    if ids.len() > 1 {
+                        out.push(format!("--- SceneID [{}/{}] ---", i + 1, ids.len()));
+                    }
+                    match sceneid::SceneIdDetails::from_str(id_str) {
+                        Ok(details) => {
+                            out.push(details.format_inspection());
+                        }
+                        Err(e) => {
+                            out.push(format!("Error decoding '{id_str}': {e}"));
+                        }
+                    }
+                }
+
+                Ok(mcp_success(out.join("\n")))
+            }
+            other => Ok(mcp_error(format!(
+                "Unknown action '{other}'. Supported: generate, forge, verify, decode, inspect"
+            ))),
         }
     }
 }

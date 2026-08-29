@@ -19,6 +19,7 @@ pub mod map;
 pub mod mcp;
 pub mod pkg;
 pub mod profanity;
+pub mod sceneid;
 pub mod sdat;
 pub mod sharc;
 
@@ -75,6 +76,10 @@ pub enum Command {
     /// PKG file operations
     #[command(subcommand)]
     Pkg(pkg::Pkg),
+
+    /// SceneID operations: generate, forge, verify, and decode
+    #[command(name = "sceneid", subcommand, alias = "scene-id", alias = "scene_id", alias = "sid", alias = "scene")]
+    SceneId(sceneid::SceneId),
 
     /// Start the Model Context Protocol (MCP) server for AI assistants
     #[cfg(feature = "mcp")]

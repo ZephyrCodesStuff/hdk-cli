@@ -1030,6 +1030,7 @@ version = "0.1.0"
 dependencies = [
  "binrw",
  "clap",
+ "crc16",
  "criterion",
  "ctr",
  "dialoguer",
@@ -1051,6 +1052,7 @@ dependencies = [
  "sha1_smol",
  "smallvec",
  "tokio",
+ "uuid",
  "walkdir",
 ]
 

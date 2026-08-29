@@ -133,6 +133,25 @@ hdk map --input <dir> [--output <dir>] [--full] [--uuid <uuid>]
 | `pkg extract` |  `x`  | Extract the contents of a PKG file to a directory    |
 | `pkg create`  |  `c`  | Build a PKG file from a directory                    |
 
+### `profanity` — Profanity Dictionary (.bin) files
+
+| Sub-command         | Alias | Description                                                        |
+| :------------------ | :---: | :----------------------------------------------------------------- |
+| `profanity extract` |  `x`  | Extract / decrypt a binary profanity dictionary (.bin) into JSON   |
+| `profanity build`   |  `c`  | Build / encrypt a profanity dictionary from JSON into binary (.bin) |
+| `profanity inspect` |  `i`  | Inspect a binary (.bin) or JSON dictionary and print statistics    |
+
+### `sceneid` — PlayStation Home SceneID operations
+
+| Sub-command        | Alias                       | Description                                                                    |
+| :----------------- | :-------------------------: | :----------------------------------------------------------------------------- |
+| `sceneid generate` | `g`, `new`, `n`, `c`        | Generate valid SceneIDs (supports `-n`/`--count`, `-t`/`--target`, `-v`)       |
+| `sceneid forge`    | `f`                         | Forge SceneIDs mapped to a target `u16` (supports `-n`, `-c`/`--crc`, `-v`)    |
+| `sceneid verify`   | `v`, `check`                | Verify SceneID UUID validity and CRC16 checksum (`[IDS]...` or `-f`/`--file`)   |
+| `sceneid decode`   | `d`, `inspect`, `i`, `x`    | Inspect SceneID UUIDs, extract numeric IDs, CRC, and scatter lookup breakdown  |
+
+`hdk sid`, `hdk scene-id`, `hdk scene_id`, and `hdk scene` are also available as aliases.
+
 ## 💿 Building
 
 ```sh
