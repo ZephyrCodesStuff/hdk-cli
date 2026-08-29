@@ -37,15 +37,17 @@ pub const SCATTER_TABLE: [[u8; 2]; 16] = [
 /// Parses a 16-bit integer from decimal or hex format (e.g. `0x1337` or `4919`).
 pub fn parse_u16(s: &str) -> Result<u16, String> {
     let s = s.trim();
-    if let Some(hex_str) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        u16::from_str_radix(hex_str, 16).map_err(|e| format!("Invalid hex value '{s}': {e}"))
-    } else if s.chars().all(|c| c.is_ascii_digit()) {
+
+    s.strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .map_or_else(|| if s.chars().all(|c| c.is_ascii_digit())
+    {
         s.parse::<u16>().map_err(|e| format!("Invalid decimal value '{s}': {e}"))
     } else if s.chars().all(|c| c.is_ascii_hexdigit()) {
         u16::from_str_radix(s, 16).map_err(|e| format!("Invalid hex value '{s}': {e}"))
     } else {
         Err(format!("Could not parse '{s}' as u16 (expected decimal or 0x-prefixed hex)"))
-    }
+    }, |hex_str| u16::from_str_radix(hex_str, 16).map_err(|e| format!("Invalid hex value '{s}': {e}")))
 }
 
 /// Detailed information decoded from a SceneID UUID.
@@ -271,10 +273,7 @@ impl SceneId {
         let mut results = Vec::with_capacity(count);
 
         for _ in 0..count {
-            let scene_id = match target {
-                Some(t) => SceneID::forge(t, crc),
-                None => SceneID::new(),
-            };
+            let scene_id = target.map_or_else(SceneID::new, |t| SceneID::forge(t, crc));
             results.push(SceneIdDetails::from_uuid(scene_id.final_id));
         }
 
